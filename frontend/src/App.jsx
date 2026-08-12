@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import './index.css'
 
 function App() {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const [proyectos, setProyectos] = useState([]);
   const [tab, setTab] = useState('sede');
   
@@ -12,7 +13,7 @@ function App() {
   const [expandedRow, setExpandedRow] = useState(null);
 
   const fetchProyectos = () => {
-    fetch('http://localhost:8000/api/proyectos')
+    fetch(`${API_URL}/api/proyectos`)
       .then(res => res.json())
       .then(data => setProyectos(data))
       .catch(err => console.error("Error fetching data: ", err));
@@ -86,8 +87,8 @@ function App() {
   const handleSave = async (e) => {
     e.preventDefault();
     const url = editingId 
-      ? `http://localhost:8000/api/proyectos/${editingId}`
-      : 'http://localhost:8000/api/proyectos';
+      ? `${API_URL}/api/proyectos/${editingId}`
+      : `${API_URL}/api/proyectos`;
       
     const method = editingId ? 'PUT' : 'POST';
     // Mantenemos el resto del proyecto si estamos editando

@@ -4,8 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
-
-app = FastAPI(title="ESAP-LegalTech Dashboard API")
+import tempfile
+import shutil
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from ai_engine.rag_core import RAGEngine
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,8 +46,15 @@ class Proyecto(BaseModel):
     manual_override: Optional[bool] = False
     override_note: Optional[str] = None
 
+class ChatRequest(BaseModel):
+    question: str
+    api_key: Optional[str] = None
+
 # Mock database
 proyectos_db: List[Proyecto] = []
+
+# Inicializar motor IA vacío (se configurará con la API Key en cada petición)
+rag_engine = RAGEngine()
 
 @app.on_event("startup")
 def load_data():
@@ -101,6 +110,44 @@ def update_proyecto(proyecto_id: int, proyecto_actualizado: Proyecto):
             return proyecto_actualizado
     return None
 
+@app.post("/api/upload-legal-doc")
+async def upload_document(file: UploadFile = File(...), api_key: Optional[str] = None):
+    if api_key:
+        rag_engine.api_key = api_key
+        rag_engine._init_models()
+        
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF.")
+        
+    try:
+        # Save temp file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        shutil.copyfileobj(file.file, temp_file)
+        temp_file.close()
+        
+        # Process and vectorise
+        num_chunks = rag_engine.process_pdf(temp_file.name)
+        os.remove(temp_file.name)
+        
+        return {"message": "Documento procesado exitosamente", "chunks_procesados": num_chunks}
+    except ValueError as ve:
+        raise HTTPException(status_code=401, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error procesando documento: {str(e)}")
+
+@app.post("/api/chat")
+def chat_with_legal_assistant(request: ChatRequest):
+    if request.api_key:
+        rag_engine.api_key = request.api_key
+        rag_engine._init_models()
+        
+    try:
+        respuesta = rag_engine.query(request.question)
+        return {"respuesta": respuesta}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error consultando IA: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
