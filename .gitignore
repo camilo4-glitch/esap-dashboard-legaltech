@@ -1,0 +1,4 @@
+node_modules/  
+venv/  
+raw-data.json  
+__pycache__/ 
