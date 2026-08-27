@@ -7,12 +7,55 @@ import Logo from './components/Logo'
 import DocumentosPanel from './components/DocumentosPanel'
 import { listProyectos, createProyecto, updateProyecto } from './lib/proyectosApi'
 
+// --- Vocabularios canónicos ---------------------------------------------
+// Estas listas son la ÚNICA fuente de verdad para los desplegables del
+// formulario. Deben escribirse igual que los valores guardados en la base,
+// si no el desplegable aparece en blanco al editar y se crean variantes
+// ortográficas del mismo tipo de proceso (p. ej. "Cuantía" vs "Cuantia").
+const TIPOS_PROCESO = [
+  'Selección Abreviada de Menor Cuantía',
+  'Subasta Inversa',
+  'Licitación',
+  'Concurso de Méritos',
+  'Mínima Cuantía',
+  'Contratación Directa',
+]
+
+const ESTADOS_PROCESO = [
+  'SIN INICIAR',
+  'EN ESTRUCTURACIÓN',
+  'EN PROYECCIÓN',
+  'EN AJUSTE',
+  'EN REVISIÓN',
+  'EN TRÁMITE',
+  'EN ADJUDICACIÓN',
+  'EN EJECUCIÓN',
+  'CONGELADO',
+  'LIQUIDADO',
+]
+
+// Fases del embudo precontractual. El `key` es lo que se guarda en la
+// columna `fase`; el `label` es lo que ve el usuario.
+const FASES_EMBUDO = [
+  { key: 'necesidad', label: 'Sin iniciar', color: '#b8c4dc' },
+  { key: 'estructuracion', label: 'Estructuración', color: '#8ea3c9' },
+  { key: 'fase1', label: 'Fase 1 · Anexos', color: '#5c7ab0' },
+  { key: 'fase2', label: 'Fase 2 · Estudios', color: '#37568f' },
+  { key: 'fase3', label: 'Fase 3 · Adjudicación', color: '#1f3a6b' },
+  { key: 'ejecucion', label: 'Ejecución', color: '#0A1730' },
+]
+
 function Dashboard() {
   const { user, signOut } = useAuth()
   const [proyectos, setProyectos] = useState([]);
   const [tab, setTab] = useState('sede');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Filtros (se aplican dentro de la sede/pestaña activa)
+  const [filtroTecnico, setFiltroTecnico] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState('');
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -37,16 +80,79 @@ function Dashboard() {
     tab === 'sede' ? p.sede === 'Sede Central' : p.sede !== 'Sede Central'
   );
 
+  // Opciones de filtro, calculadas sobre la pestaña activa
+  const opcionesTecnico = [...new Set(filteredProyectos.map(p => p.tecnico).filter(Boolean))].sort();
+  const opcionesEstado = [...new Set(filteredProyectos.map(p => p.statusActual).filter(Boolean))].sort();
+  const opcionesTipo = [...new Set(filteredProyectos.map(p => p.tipo).filter(Boolean))].sort();
+
+  // Proyectos tras aplicar los filtros adicionales — esta es la base real de
+  // KPIs, embudo, gráfico de estado, ranking y tabla.
+  const vistaProyectos = filteredProyectos.filter(p =>
+    (!filtroTecnico || p.tecnico === filtroTecnico) &&
+    (!filtroEstado || p.statusActual === filtroEstado) &&
+    (!filtroTipo || p.tipo === filtroTipo)
+  );
+
+  const limpiarFiltros = () => { setFiltroTecnico(''); setFiltroEstado(''); setFiltroTipo(''); };
+  const filtrosActivos = !!(filtroTecnico || filtroEstado || filtroTipo);
+
   // Stats para KPIs
-  const totalValor = filteredProyectos.reduce((sum, p) => sum + (p.valorContrato || 0), 0);
-  const enEjecucion = filteredProyectos.filter(p => (p.statusActual || '').toUpperCase().includes('EJECUCION') || (p.statusActual || '').toUpperCase().includes('EJECUCIÓN')).length;
-  const enTramite = filteredProyectos.length - enEjecucion;
+  const totalValor = vistaProyectos.reduce((sum, p) => sum + (p.valorContrato || 0), 0);
+  const enEjecucion = vistaProyectos.filter(p => (p.statusActual || '').toUpperCase().includes('EJECUCION') || (p.statusActual || '').toUpperCase().includes('EJECUCIÓN')).length;
+  const enTramite = vistaProyectos.length - enEjecucion;
 
   // Ranking Top 8 por avance
-  const ranking = [...filteredProyectos]
+  const ranking = [...vistaProyectos]
     .filter(p => p.avance !== undefined && p.avance !== null)
     .sort((a, b) => (b.avance || 0) - (a.avance || 0))
     .slice(0, 8);
+
+  // --- Embudo precontractual: cuántos proyectos hay en cada fase ---
+  const embudo = FASES_EMBUDO.map(f => ({
+    ...f,
+    count: vistaProyectos.filter(p => (p.fase || 'necesidad') === f.key).length,
+  }));
+  const embudoMax = Math.max(1, ...embudo.map(f => f.count));
+
+  // --- Distribución por estado ---
+  const COLORES_ESTADO = {
+    'SIN INICIAR': '#2a78d6',
+    'EN ESTRUCTURACIÓN': '#eb6834',
+    'EN EJECUCIÓN': '#1baf7a',
+    'EN AJUSTE': '#eda100',
+    'EN ADJUDICACIÓN': '#008300',
+    'EN REVISIÓN': '#4a3aa7',
+    'CONGELADO': '#e34948',
+    'EN TRÁMITE': '#0f766e',
+    'EN PROYECCIÓN': '#7c8ba1',
+  };
+  const colorEstado = (estado) => COLORES_ESTADO[(estado || '').toUpperCase()] || '#8892a6';
+  const estadosCount = {};
+  vistaProyectos.forEach(p => {
+    const e = p.statusActual || 'SIN ESTADO';
+    estadosCount[e] = (estadosCount[e] || 0) + 1;
+  });
+  const distribucionEstados = Object.entries(estadosCount)
+    .map(([estado, count]) => ({ estado, count, color: colorEstado(estado) }))
+    .sort((a, b) => b.count - a.count);
+  const estadosMax = Math.max(1, ...distribucionEstados.map(e => e.count));
+
+  // --- Puntos de atención: proyectos congelados ---
+  const puntosAtencion = vistaProyectos.filter(p => (p.statusActual || '').toUpperCase() === 'CONGELADO');
+
+  // --- Comparativo Sede Central vs Territorial (usa TODOS los proyectos, sin filtros ni pestaña) ---
+  const resumenSede = (nombreSede) => {
+    const grupo = nombreSede === 'Sede Central'
+      ? proyectos.filter(p => p.sede === 'Sede Central')
+      : proyectos.filter(p => p.sede !== 'Sede Central');
+    const conAvance = grupo.filter(p => p.avance !== undefined && p.avance !== null);
+    const avancePromedio = conAvance.length ? conAvance.reduce((s, p) => s + (p.avance || 0), 0) / conAvance.length : 0;
+    const valor = grupo.reduce((s, p) => s + (p.valorContrato || 0), 0);
+    const ejecucion = grupo.filter(p => (p.statusActual || '').toUpperCase().includes('EJECUCI')).length;
+    return { total: grupo.length, avancePromedio, valor, ejecucion };
+  };
+  const resumenCentral = resumenSede('Sede Central');
+  const resumenTerritorial = resumenSede('Territorial');
 
   const openAddModal = () => {
     setEditingId(null);
@@ -56,9 +162,9 @@ function Dashboard() {
       statusActual: 'EN ESTRUCTURACION',
       fase: 'necesidad',
       tecnico: '',
-      valorContrato: 0,
+      valorContrato: '',
       avance: 0,
-      sede: tab === 'sede' ? 'Sede Central' : 'Territoriales',
+      sede: tab === 'sede' ? 'Sede Central' : 'Territorial',
       verificado: true,
     });
     setIsModalOpen(true);
@@ -71,8 +177,11 @@ function Dashboard() {
       nombre: proyecto.nombre,
       tipo: proyecto.tipo || '',
       statusActual: proyecto.statusActual || '',
+      fase: proyecto.fase || 'necesidad',
       tecnico: proyecto.tecnico || '',
-      valorContrato: proyecto.valorContrato || 0,
+      // ?? y no || : un valor nulo debe quedar vacío, NO convertirse en 0
+      // (perderíamos la diferencia entre "sin valor registrado" y "vale $0").
+      valorContrato: proyecto.valorContrato ?? '',
       avance: proyecto.avance || 0,
       sede: proyecto.sede,
       objeto: proyecto.objeto || '',
@@ -88,8 +197,17 @@ function Dashboard() {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    const numeric = name === 'valorContrato' || name === 'avance';
-    const val = type === 'checkbox' ? checked : (numeric ? (parseFloat(value) || 0) : value);
+    let val;
+    if (type === 'checkbox') {
+      val = checked;
+    } else if (name === 'avance') {
+      val = Math.max(0, Math.min(100, parseFloat(value) || 0));
+    } else if (name === 'valorContrato') {
+      // Vacío se conserva vacío (se guardará como NULL), no como 0.
+      val = value === '' ? '' : (parseFloat(value) || 0);
+    } else {
+      val = value;
+    }
     setFormData(prev => ({ ...prev, [name]: val }));
   };
 
@@ -129,7 +247,7 @@ function Dashboard() {
       const s = v === null || v === undefined ? '' : String(v);
       return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const filas = [encabezados.join(';'), ...filteredProyectos.map(p => cols.map(c => escapar(p[c])).join(';'))];
+    const filas = [encabezados.join(';'), ...vistaProyectos.map(p => cols.map(c => escapar(p[c])).join(';'))];
     const csv = '﻿' + filas.join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -186,6 +304,40 @@ function Dashboard() {
           </div>
         )}
 
+        {/* Comparativo Sede Central vs Territorial — vista general, no depende de la pestaña activa */}
+        <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm mb-6">
+          <div className="flex items-baseline justify-between mb-4 gap-2">
+            <h3 className="font-serif text-[16px] font-semibold text-navy-deep m-0">Vista general — Sede Central vs. Territorial</h3>
+            <span className="text-[11.5px] text-ink-faint font-mono">toda la cartera, {proyectos.length} proyectos</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[{ label: 'Sede Central', r: resumenCentral, accent: 'bg-navy' }, { label: 'Territorial', r: resumenTerritorial, accent: 'bg-teal' }].map(({ label, r, accent }) => (
+              <div key={label} className="border border-border rounded-lg p-4 relative overflow-hidden">
+                <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${accent}`}></div>
+                <div className="font-serif text-[15px] font-semibold text-navy-deep mb-3">{label}</div>
+                <div className="grid grid-cols-4 gap-2">
+                  <div>
+                    <div className="font-mono text-[9.5px] uppercase tracking-wide text-ink-faint">Proyectos</div>
+                    <div className="font-serif text-xl font-semibold text-navy-deep">{loading ? '…' : r.total}</div>
+                  </div>
+                  <div>
+                    <div className="font-mono text-[9.5px] uppercase tracking-wide text-ink-faint">Avance prom.</div>
+                    <div className="font-serif text-xl font-semibold text-navy-deep">{loading ? '…' : `${r.avancePromedio.toFixed(1)}%`}</div>
+                  </div>
+                  <div>
+                    <div className="font-mono text-[9.5px] uppercase tracking-wide text-ink-faint">En ejecución</div>
+                    <div className="font-serif text-xl font-semibold text-navy-deep">{loading ? '…' : r.ejecucion}</div>
+                  </div>
+                  <div>
+                    <div className="font-mono text-[9.5px] uppercase tracking-wide text-ink-faint">Valor</div>
+                    <div className="font-serif text-xl font-semibold text-navy-deep">{loading ? '…' : formatMoney(r.valor)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="mb-6 flex justify-between items-end flex-wrap gap-4">
           <div>
             <h2 className="font-serif text-[28px] font-semibold mb-1 tracking-tight text-navy-deep">{tab === 'sede' ? 'Sede Central CAN' : 'Direcciones Territoriales'} <span className="text-gold">—</span> Proyectos</h2>
@@ -207,11 +359,35 @@ function Dashboard() {
           </div>
         </div>
 
+        {/* Filtros */}
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <select value={filtroTecnico} onChange={(e) => setFiltroTecnico(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-teal">
+            <option value="">Técnico: todos</option>
+            {opcionesTecnico.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-teal">
+            <option value="">Estado: todos</option>
+            {opcionesEstado.map(e => <option key={e} value={e}>{e}</option>)}
+          </select>
+          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-teal">
+            <option value="">Tipo de proceso: todos</option>
+            {opcionesTipo.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {filtrosActivos && (
+            <button onClick={limpiarFiltros} className="text-[12.5px] text-navy hover:text-navy-deep underline font-semibold">
+              Limpiar filtros
+            </button>
+          )}
+          {filtrosActivos && (
+            <span className="text-[11.5px] text-ink-faint font-mono ml-auto">{vistaProyectos.length} de {filteredProyectos.length} proyectos</span>
+          )}
+        </div>
+
         {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm relative overflow-hidden before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-navy">
             <div className="font-mono text-[10.5px] tracking-widest uppercase text-ink-faint font-semibold">Total Proyectos</div>
-            <div className="font-serif text-3xl font-semibold text-navy-deep mt-1.5">{loading ? '…' : filteredProyectos.length}</div>
+            <div className="font-serif text-3xl font-semibold text-navy-deep mt-1.5">{loading ? '…' : vistaProyectos.length}</div>
           </div>
           <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm relative overflow-hidden before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-teal">
             <div className="font-mono text-[10.5px] tracking-widest uppercase text-ink-faint font-semibold">En Ejecución</div>
@@ -224,6 +400,68 @@ function Dashboard() {
           <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm relative overflow-hidden before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-purple">
             <div className="font-mono text-[10.5px] tracking-widest uppercase text-ink-faint font-semibold">Valor Estimado</div>
             <div className="font-serif text-3xl font-semibold text-navy-deep mt-1.5">{loading ? '…' : formatMoney(totalValor)}</div>
+          </div>
+        </div>
+
+        {/* Puntos de atención */}
+        {puntosAtencion.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-[10px] p-5 shadow-sm mb-6">
+            <div className="flex items-baseline justify-between mb-3 gap-2">
+              <h3 className="font-serif text-[16px] font-semibold text-red-800 m-0">⚠ Puntos de atención — proyectos congelados</h3>
+              <span className="text-[11.5px] text-red-700/70 font-mono">{puntosAtencion.length} proyecto{puntosAtencion.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {puntosAtencion.map(p => (
+                <div key={p.id} className="flex items-center justify-between gap-3 bg-white border border-red-100 rounded-lg px-3 py-2">
+                  <div className="text-[13px] font-semibold text-ink">{p.nombre}</div>
+                  <div className="text-[11.5px] text-ink-soft font-mono">{p.tecnico || 'Sin técnico asignado'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Embudo precontractual + distribución por estado */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm">
+            <div className="flex items-baseline justify-between mb-4 gap-2">
+              <h3 className="font-serif text-[16px] font-semibold text-navy-deep m-0">Embudo precontractual</h3>
+              <span className="text-[11.5px] text-ink-faint font-mono">por fase</span>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {embudo.map(f => (
+                <div key={f.key} className="grid grid-cols-[110px_1fr_28px] items-center gap-2">
+                  <div className="text-[11px] text-ink-soft font-semibold truncate">{f.label}</div>
+                  <div className="h-5 bg-bg rounded overflow-hidden">
+                    <div className="h-full rounded flex items-center justify-end pr-1.5" style={{ width: `${(f.count / embudoMax) * 100}%`, background: f.color, minWidth: f.count > 0 ? '10px' : 0 }}></div>
+                  </div>
+                  <div className="text-[12px] font-mono font-semibold text-ink text-right">{f.count}</div>
+                </div>
+              ))}
+              {!loading && vistaProyectos.length === 0 && <div className="text-ink-faint text-sm text-center py-4">Sin datos</div>}
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm">
+            <div className="flex items-baseline justify-between mb-4 gap-2">
+              <h3 className="font-serif text-[16px] font-semibold text-navy-deep m-0">Distribución por estado</h3>
+              <span className="text-[11.5px] text-ink-faint font-mono">{vistaProyectos.length} proyectos</span>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {distribucionEstados.map(e => (
+                <div key={e.estado} className="grid grid-cols-[130px_1fr_28px] items-center gap-2">
+                  <div className="text-[11px] text-ink-soft font-semibold truncate flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: e.color }}></span>
+                    {e.estado}
+                  </div>
+                  <div className="h-5 bg-bg rounded overflow-hidden">
+                    <div className="h-full rounded" style={{ width: `${(e.count / estadosMax) * 100}%`, background: e.color, minWidth: e.count > 0 ? '10px' : 0 }}></div>
+                  </div>
+                  <div className="text-[12px] font-mono font-semibold text-ink text-right">{e.count}</div>
+                </div>
+              ))}
+              {!loading && distribucionEstados.length === 0 && <div className="text-ink-faint text-sm text-center py-4">Sin datos</div>}
+            </div>
           </div>
         </div>
 
@@ -273,7 +511,7 @@ function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {filteredProyectos.map(p => (
+                {vistaProyectos.map(p => (
                   <React.Fragment key={p.id}>
                     <tr onClick={() => toggleRow(p.id)} className="hover:bg-bg transition-colors cursor-pointer border-b border-border last:border-0 group">
                       <td className="p-3 font-semibold text-ink group-hover:text-navy transition-colors">
@@ -335,9 +573,9 @@ function Dashboard() {
                     )}
                   </React.Fragment>
                 ))}
-                {!loading && filteredProyectos.length === 0 && (
+                {!loading && vistaProyectos.length === 0 && (
                   <tr>
-                    <td colSpan="7" className="p-10 text-center text-ink-faint">No hay proyectos para esta sede.</td>
+                    <td colSpan="7" className="p-10 text-center text-ink-faint">{filtrosActivos ? 'Ningún proyecto coincide con los filtros.' : 'No hay proyectos para esta sede.'}</td>
                   </tr>
                 )}
               </tbody>
@@ -349,15 +587,15 @@ function Dashboard() {
       {/* Modal Form */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm">
-          <div className="bg-card rounded-[10px] shadow-xl w-full max-w-md border border-border overflow-hidden">
-            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-navy">
+          <div className="bg-card rounded-[10px] shadow-xl w-full max-w-lg border border-border overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-navy shrink-0">
               <h3 className="font-serif text-lg font-semibold text-white">{editingId ? 'Editar Proyecto' : 'Nuevo Proyecto'}</h3>
               <button onClick={closeModal} className="text-white/60 hover:text-white">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-6 flex flex-col gap-4">
+            <form onSubmit={handleSave} className="p-6 flex flex-col gap-4 overflow-y-auto">
               <div>
                 <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Nombre del Proyecto</label>
                 <input required type="text" name="nombre" value={formData.nombre || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Ej. Adecuación de aulas..." />
@@ -368,42 +606,68 @@ function Dashboard() {
                   <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Tipo de Proceso</label>
                   <select name="tipo" value={formData.tipo || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white">
                     <option value="">Seleccione...</option>
-                    <option value="Licitacion Publica">Licitación</option>
-                    <option value="Selección Abreviada De Menor Cuantia">Selección abreviada</option>
-                    <option value="Concurso De Meritos">Concurso de méritos</option>
-                    <option value="Minima">Mínima cuantía</option>
-                    <option value="Contratacion Directa">Contratación directa</option>
+                    {TIPOS_PROCESO.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Estado</label>
-                  <input type="text" name="statusActual" value={formData.statusActual || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Ej. EN ESTRUCTURACION" />
+                  <select name="statusActual" value={formData.statusActual || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white">
+                    <option value="">Seleccione...</option>
+                    {ESTADOS_PROCESO.map(e => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Fase</label>
+                  <select name="fase" value={formData.fase || 'necesidad'} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white">
+                    {FASES_EMBUDO.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Sede</label>
+                  <select name="sede" value={formData.sede || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white">
+                    <option value="Sede Central">Sede Central</option>
+                    <option value="Territorial">Territorial</option>
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Técnico a cargo</label>
-                  <input required type="text" name="tecnico" value={formData.tecnico || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Nombre completo" />
+                  <input type="text" name="tecnico" value={formData.tecnico || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Nombre completo" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Valor Estimado</label>
-                  <input required type="number" name="valorContrato" value={formData.valorContrato || 0} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Ej. 150000000" />
+                  <input type="number" name="valorContrato" value={formData.valorContrato ?? ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Déjalo vacío si aún no hay valor" />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Avance documental (%)</label>
+                <input type="number" min="0" max="100" name="avance" value={formData.avance || 0} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" />
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Objeto</label>
+                <textarea name="objeto" value={formData.objeto || ''} onChange={handleInputChange} rows={3} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white resize-y" placeholder="Descripción del objeto contractual..." />
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Observaciones</label>
+                <textarea name="observaciones" value={formData.observaciones || ''} onChange={handleInputChange} rows={3} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white resize-y" placeholder="Notas, alertas, seguimiento..." />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Avance (%)</label>
-                  <input type="number" min="0" max="100" name="avance" value={formData.avance || 0} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" />
+                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Jurídico</label>
+                  <input type="text" name="juridico" value={formData.juridico || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Nombre" />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Sede</label>
-                  <select name="sede" value={formData.sede || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white">
-                    <option value="Sede Central">Sede Central</option>
-                    <option value="Territoriales">Territorial GIM</option>
-                    <option value="Ejecución Territorial">Ejecución Directa</option>
-                  </select>
+                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Abogado</label>
+                  <input type="text" name="abogado" value={formData.abogado || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Nombre" />
                 </div>
               </div>
 
