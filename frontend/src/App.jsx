@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import './index.css'
 import { useAuth } from './lib/AuthProvider'
 import Login from './components/Login'
+import UpdatePassword from './components/UpdatePassword'
 import Logo from './components/Logo'
 import DocumentosPanel from './components/DocumentosPanel'
 import { listProyectos, createProyecto, updateProyecto } from './lib/proyectosApi'
@@ -58,6 +59,7 @@ function Dashboard() {
       valorContrato: 0,
       avance: 0,
       sede: tab === 'sede' ? 'Sede Central' : 'Territoriales',
+      verificado: true,
     });
     setIsModalOpen(true);
   };
@@ -77,6 +79,7 @@ function Dashboard() {
       observaciones: proyecto.observaciones || '',
       juridico: proyecto.juridico || '',
       abogado: proyecto.abogado || '',
+      verificado: proyecto.verificado ?? true,
     });
     setIsModalOpen(true);
   };
@@ -84,9 +87,10 @@ function Dashboard() {
   const closeModal = () => setIsModalOpen(false);
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     const numeric = name === 'valorContrato' || name === 'avance';
-    setFormData(prev => ({ ...prev, [name]: numeric ? (parseFloat(value) || 0) : value }));
+    const val = type === 'checkbox' ? checked : (numeric ? (parseFloat(value) || 0) : value);
+    setFormData(prev => ({ ...prev, [name]: val }));
   };
 
   const handleSave = async (e) => {
@@ -117,6 +121,27 @@ function Dashboard() {
   };
 
   const proyectoExpandido = proyectos.find(p => p.id === expandedRow);
+
+  const exportarCSV = () => {
+    const cols = ['id', 'nombre', 'sede', 'tipo', 'fase', 'statusActual', 'tecnico', 'valorContrato', 'avance', 'objeto', 'observaciones', 'juridico', 'abogado'];
+    const encabezados = ['ID', 'Nombre', 'Sede', 'Tipo de proceso', 'Fase', 'Estado', 'Técnico', 'Valor estimado', 'Avance %', 'Objeto', 'Observaciones', 'Jurídico', 'Abogado'];
+    const escapar = (v) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const filas = [encabezados.join(';'), ...filteredProyectos.map(p => cols.map(c => escapar(p[c])).join(';'))];
+    const csv = '﻿' + filas.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fecha = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `proyectos-gim-${tab === 'sede' ? 'sede-central' : 'territoriales'}-${fecha}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="min-h-screen pb-16 relative bg-bg text-ink font-sans">
@@ -166,12 +191,20 @@ function Dashboard() {
             <h2 className="font-serif text-[28px] font-semibold mb-1 tracking-tight text-navy-deep">{tab === 'sede' ? 'Sede Central CAN' : 'Direcciones Territoriales'} <span className="text-gold">—</span> Proyectos</h2>
             <p className="text-ink-soft text-sm max-w-2xl">Ruta de estructuración de los proyectos desde la fase inicial hasta el acta de inicio.</p>
           </div>
-          <button
-            onClick={openAddModal}
-            className="bg-navy hover:bg-navy-deep text-white font-semibold py-2.5 px-5 rounded-lg shadow transition-colors text-sm tracking-wide"
-          >
-            + Nuevo Proyecto
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={exportarCSV}
+              className="bg-white border border-navy text-navy hover:bg-navy hover:text-white font-semibold py-2.5 px-5 rounded-lg shadow-sm transition-colors text-sm tracking-wide"
+            >
+              ⬇ Exportar CSV
+            </button>
+            <button
+              onClick={openAddModal}
+              className="bg-navy hover:bg-navy-deep text-white font-semibold py-2.5 px-5 rounded-lg shadow transition-colors text-sm tracking-wide"
+            >
+              + Nuevo Proyecto
+            </button>
+          </div>
         </div>
 
         {/* KPIs */}
@@ -206,6 +239,9 @@ function Dashboard() {
                 <div className="font-mono text-[11px] text-ink-faint font-bold">{i + 1}</div>
                 <div className="truncate font-semibold text-[12.5px] text-ink flex items-baseline gap-1">
                   {p.nombre} <span className="text-[10.5px] text-ink-faint font-normal">{p.tecnico}</span>
+                  {p.verificado === false && (
+                    <span className="text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Sin verificar</span>
+                  )}
                 </div>
                 <div className="col-span-full h-1.5 bg-bg rounded overflow-hidden mt-[-4px]">
                   <div className="h-full bg-teal rounded" style={{ width: `${p.avance || 0}%` }}></div>
@@ -240,7 +276,14 @@ function Dashboard() {
                 {filteredProyectos.map(p => (
                   <React.Fragment key={p.id}>
                     <tr onClick={() => toggleRow(p.id)} className="hover:bg-bg transition-colors cursor-pointer border-b border-border last:border-0 group">
-                      <td className="p-3 font-semibold text-ink group-hover:text-navy transition-colors">{p.nombre}</td>
+                      <td className="p-3 font-semibold text-ink group-hover:text-navy transition-colors">
+                        <span className="flex items-center gap-2">
+                          {p.nombre}
+                          {p.verificado === false && (
+                            <span title="Cargado automáticamente a partir del informe GIM; falta verificar con el equipo." className="text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded whitespace-nowrap">⚠ Sin verificar</span>
+                          )}
+                        </span>
+                      </td>
                       <td className="p-3">{p.tipo || '-'}</td>
                       <td className="p-3">
                         <span className="font-mono text-[10.5px] uppercase text-ink-soft">{p.fase || '-'}</span>
@@ -364,6 +407,11 @@ function Dashboard() {
                 </div>
               </div>
 
+              <label className="flex items-center gap-2 text-[12.5px] text-ink-soft select-none">
+                <input type="checkbox" name="verificado" checked={formData.verificado ?? true} onChange={handleInputChange} className="w-4 h-4 accent-teal" />
+                Dato verificado por el equipo GIM (desmárcalo si aún falta confirmar la información)
+              </label>
+
               <div className="mt-4 flex gap-3 justify-end">
                 <button type="button" onClick={closeModal} className="px-4 py-2 rounded-lg text-sm font-semibold text-ink-soft hover:bg-bg transition-colors">
                   Cancelar
@@ -381,10 +429,15 @@ function Dashboard() {
 }
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, passwordRecovery } = useAuth();
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-bg text-ink-soft">Cargando…</div>;
+  }
+  // El enlace de "recuperar contraseña" abre una sesión temporal; hay que
+  // mostrar el formulario de nueva contraseña antes que el dashboard normal.
+  if (passwordRecovery) {
+    return <UpdatePassword />;
   }
   if (!user) {
     return <Login />;

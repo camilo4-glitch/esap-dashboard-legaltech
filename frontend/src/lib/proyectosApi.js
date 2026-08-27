@@ -52,6 +52,7 @@ const toRow = (p) => ({
   fecha_inicio: p.fechaInicio || null,
   fecha_fin: p.fechaFin || null,
   fecha_acta_final: p.fechaActaFinal || null,
+  verificado: p.verificado ?? true,
 })
 
 const fromRow = (r) => ({
@@ -98,6 +99,7 @@ const fromRow = (r) => ({
   fechaFin: r.fecha_fin,
   fechaActaFinal: r.fecha_acta_final,
   updatedAt: r.updated_at,
+  verificado: r.verificado,
 })
 
 export async function listProyectos() {
