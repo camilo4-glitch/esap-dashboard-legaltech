@@ -8,3 +8,9 @@ langchain-google-genai
 chromadb
 pypdf
 python-multipart
+
+openai
+httpx
+
+openai
+httpx

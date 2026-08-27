@@ -1,18 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-navy: #0B2E6E;
-  --color-navy-deep: #071F4D;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Fraunces', ui-serif, Georgia, serif;
+
+  /* Paleta "business suit": azul-carbón profundo + acento bronce/dorado apagado. */
+  --color-navy: #132242;
+  --color-navy-deep: #0A1730;
+  --color-charcoal: #1C2333;
   --color-teal: #1A7A6E;
-  --color-gold: #C8970A;
+  --color-gold: #B08D3F;
+  --color-gold-soft: #C8970A;
   --color-orange: #C9611E;
   --color-purple: #6E56A6;
   --color-blue: #3E6FB0;
   --color-gray: #8C97A8;
   --color-gray-light: #CBD5E1;
-  --color-bg: #E7EDF6;
-  --color-card: #F9FBFE;
-  --color-border: #D6E0EE;
+
+  --color-bg: #EEF1F6;
+  --color-card: #FFFFFF;
+  --color-border: #E2E6EE;
   --color-ink: #16213A;
   --color-ink-soft: #5B6478;
   --color-ink-faint: #8A93A6;
@@ -20,9 +28,9 @@
 
 @layer base {
   body {
-    @apply bg-bg text-ink min-h-screen antialiased;
-    background-image: 
-      radial-gradient(1100px 500px at 15% -10%, rgba(11,46,110,0.06), transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, rgba(26,122,110,0.05), transparent 55%);
+    @apply bg-bg text-ink min-h-screen antialiased font-sans;
+    background-image:
+      radial-gradient(1100px 500px at 15% -10%, rgba(19,34,66,0.05), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(176,141,63,0.05), transparent 55%);
   }
 }

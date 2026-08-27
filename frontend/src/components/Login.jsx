@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../lib/AuthProvider'
+import Logo from './Logo'
 
 // Pantalla de login. Los usuarios se crean desde el panel de Supabase
 // (Authentication > Users > Add user) o con una invitación por correo —
@@ -21,72 +22,58 @@ export default function Login() {
   }
 
   return (
-    <div style={styles.wrap}>
-      <form onSubmit={handleSubmit} style={styles.card}>
-        <h1 style={styles.title}>SIG-INFRA · GIM ESAP</h1>
-        <p style={styles.subtitle}>Ingresa con tu cuenta institucional</p>
-        <label style={styles.label}>Correo</label>
-        <input
-          style={styles.input}
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          autoFocus
-        />
-        <label style={styles.label}>Contraseña</label>
-        <input
-          style={styles.input}
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        {error && <p style={styles.error}>{error}</p>}
-        <button style={styles.button} type="submit" disabled={loading}>
-          {loading ? 'Ingresando…' : 'Ingresar'}
-        </button>
-      </form>
+    <div className="min-h-screen flex items-center justify-center bg-navy-deep relative overflow-hidden font-sans">
+      <div
+        className="absolute inset-0 opacity-[0.07]"
+        style={{
+          backgroundImage:
+            'radial-gradient(700px 400px at 10% 0%, #C8970A, transparent 60%), radial-gradient(700px 400px at 100% 100%, #1A7A6E, transparent 55%)',
+        }}
+      />
+      <div className="w-full max-w-[380px] mx-4 relative">
+        <div className="flex justify-center mb-8">
+          <Logo />
+        </div>
+
+        <form onSubmit={handleSubmit} className="bg-card rounded-[10px] shadow-2xl border border-white/10 p-8">
+          <h1 className="font-serif text-[20px] font-semibold text-navy-deep m-0">Acceso institucional</h1>
+          <p className="text-ink-soft text-[13px] mt-1 mb-6">Ingresa con tu cuenta de la ESAP</p>
+
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-ink-soft mb-1.5">Correo</label>
+          <input
+            className="w-full border border-border rounded-lg px-3 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-gold/40 focus:border-gold bg-white"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoFocus
+            placeholder="nombre@esap.edu.co"
+          />
+
+          <label className="block text-[11px] font-semibold uppercase tracking-wide text-ink-soft mb-1.5">Contraseña</label>
+          <input
+            className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold/40 focus:border-gold bg-white"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+
+          {error && <p className="text-red-600 text-[13px] mt-3">{error}</p>}
+
+          <button
+            className="mt-6 w-full py-2.5 rounded-lg bg-navy hover:bg-navy-deep text-white font-semibold text-sm tracking-wide transition-colors disabled:opacity-60"
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? 'Ingresando…' : 'Ingresar'}
+          </button>
+        </form>
+
+        <p className="text-center text-white/30 text-[11px] mt-6 font-mono tracking-wide uppercase">
+          Gestión de Infraestructura Misional · ESAP
+        </p>
+      </div>
     </div>
   )
-}
-
-const styles = {
-  wrap: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#E7EDF6',
-  },
-  card: {
-    width: 360,
-    background: '#fff',
-    borderRadius: 12,
-    padding: 32,
-    boxShadow: '0 10px 30px rgba(11,46,110,0.15)',
-  },
-  title: { color: '#0B2E6E', margin: 0, fontSize: 20 },
-  subtitle: { color: '#5a6b8c', marginTop: 4, marginBottom: 20, fontSize: 13 },
-  label: { display: 'block', fontSize: 12, color: '#16213A', marginTop: 12, marginBottom: 4 },
-  input: {
-    width: '100%',
-    padding: '10px 12px',
-    borderRadius: 8,
-    border: '1px solid #cdd7ea',
-    fontSize: 14,
-    boxSizing: 'border-box',
-  },
-  button: {
-    marginTop: 20,
-    width: '100%',
-    padding: '10px 12px',
-    borderRadius: 8,
-    border: 'none',
-    background: '#0B2E6E',
-    color: '#fff',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  error: { color: '#b3261e', fontSize: 13, marginTop: 10 },
 }
