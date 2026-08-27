@@ -57,10 +57,22 @@ const MAPA = {
   fechaFin: 'fecha_fin',
   fechaActaFinal: 'fecha_acta_final',
   verificado: 'verificado',
+  faseDesde: 'fase_desde',
+  fechaLimiteManual: 'fecha_limite_manual',
+}
+
+// Campos que calcula la base de datos y que NUNCA se escriben desde aquí.
+// Llegan en la vista v_proyectos_seguimiento.
+const CALCULADOS = {
+  fechaLimite: 'fecha_limite',
+  diasHabilesRestantes: 'dias_habiles_restantes',
+  semaforo: 'semaforo',
 }
 
 // Columnas de fecha: '' no es una fecha válida en Postgres, se manda como null.
-const COLUMNAS_FECHA = new Set(['fecha_inicio', 'fecha_fin', 'fecha_acta_final'])
+const COLUMNAS_FECHA = new Set([
+  'fecha_inicio', 'fecha_fin', 'fecha_acta_final', 'fase_desde', 'fecha_limite_manual',
+])
 // Columnas numéricas: '' tampoco es válido; se manda como null.
 const COLUMNAS_NUMERICAS = new Set(['cdp', 'valor_contrato', 'valor_adicion', 'pagado', 'actas_pago', 'retencion'])
 
@@ -113,23 +125,66 @@ const fromRow = (r) => {
   for (const [claveFront, columna] of Object.entries(MAPA)) {
     p[claveFront] = r[columna]
   }
+  for (const [claveFront, columna] of Object.entries(CALCULADOS)) {
+    p[claveFront] = r[columna]
+  }
   return p
 }
 
 export async function listProyectos() {
+  // Se lee de la vista, que ya trae vencimiento, días hábiles restantes y
+  // semáforo calculados en la base. Las escrituras siguen yendo a la tabla.
   const { data, error } = await supabase
-    .from('proyectos')
+    .from('v_proyectos_seguimiento')
     .select('*')
     .order('id', { ascending: true })
   if (error) throw error
   return data.map(fromRow)
 }
 
+// --- Bitácora de cambios ----------------------------------------------
+// La escribe un disparador en la base, no esta interfaz. Aquí solo se lee.
+export async function listHistorial(proyectoId, limite = 50) {
+  const { data, error } = await supabase
+    .from('auditoria')
+    .select('id, accion, usuario_email, detalle, created_at')
+    .eq('proyecto_id', proyectoId)
+    .order('created_at', { ascending: false })
+    .limit(limite)
+  if (error) throw error
+  return data
+}
+
+// --- Configuración de términos por fase -------------------------------
+export async function listTerminos() {
+  const { data, error } = await supabase
+    .from('terminos_fase')
+    .select('*')
+    .order('orden', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function guardarTermino(fase, diasHabiles) {
+  const { error } = await supabase
+    .from('terminos_fase')
+    .update({ dias_habiles: diasHabiles === '' || diasHabiles === null ? null : Number(diasHabiles) })
+    .eq('fase', fase)
+  if (error) throw error
+  // Recalcula el vencimiento de todos los proyectos con el término nuevo.
+  const { error: rpcError } = await supabase.rpc('recalcular_terminos')
+  if (rpcError) throw rpcError
+}
+
+// Nota sobre auditoría: ya NO se registra desde aquí. Un disparador en la base
+// de datos anota cada alta, cambio y borrado —con el valor anterior y el nuevo—
+// pase lo que pase con esta interfaz. Registrarlo también aquí duplicaría cada
+// movimiento y dejaría de funcionar si algún día se cambia el frontend.
+
 export async function createProyecto(proyecto) {
   const row = toRowNuevo(proyecto)
   const { data, error } = await supabase.from('proyectos').insert(row).select().single()
   if (error) throw error
-  await logAuditoria(row.id, 'crear_proyecto', { nombre: row.nombre })
   return fromRow(data)
 }
 
@@ -147,22 +202,10 @@ export async function updateProyecto(id, cambios) {
     .select()
     .single()
   if (error) throw error
-  await logAuditoria(id, 'actualizar_proyecto', row)
   return fromRow(data)
 }
 
 export async function deleteProyecto(id) {
   const { error } = await supabase.from('proyectos').delete().eq('id', id)
   if (error) throw error
-  await logAuditoria(id, 'eliminar_proyecto', {})
-}
-
-async function logAuditoria(proyectoId, accion, detalle) {
-  const { data: { user } } = await supabase.auth.getUser()
-  await supabase.from('auditoria').insert({
-    proyecto_id: proyectoId,
-    usuario_id: user?.id ?? null,
-    accion,
-    detalle,
-  })
 }

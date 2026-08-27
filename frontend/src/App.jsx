@@ -5,7 +5,8 @@ import Login from './components/Login'
 import UpdatePassword from './components/UpdatePassword'
 import Logo from './components/Logo'
 import DocumentosPanel from './components/DocumentosPanel'
-import { listProyectos, createProyecto, updateProyecto } from './lib/proyectosApi'
+import HistorialPanel from './components/HistorialPanel'
+import { listProyectos, createProyecto, updateProyecto, listTerminos, guardarTermino } from './lib/proyectosApi'
 
 // --- Vocabularios canónicos ---------------------------------------------
 // Estas listas son la ÚNICA fuente de verdad para los desplegables del
@@ -57,6 +58,30 @@ function Dashboard() {
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
 
+  // Configuración de términos por fase
+  const [terminosAbierto, setTerminosAbierto] = useState(false);
+  const [terminos, setTerminos] = useState([]);
+  const [guardandoTermino, setGuardandoTermino] = useState(false);
+
+  const abrirTerminos = async () => {
+    setTerminosAbierto(true);
+    try { setTerminos(await listTerminos()); }
+    catch (err) { setError('No se pudieron cargar los términos: ' + err.message); }
+  };
+
+  const cambiarTermino = async (fase, dias) => {
+    setGuardandoTermino(true);
+    try {
+      await guardarTermino(fase, dias);
+      setTerminos(await listTerminos());
+      fetchProyectos();   // los vencimientos cambiaron
+    } catch (err) {
+      alert('No se pudo guardar el término: ' + err.message);
+    } finally {
+      setGuardandoTermino(false);
+    }
+  };
+
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -101,11 +126,22 @@ function Dashboard() {
   const enEjecucion = vistaProyectos.filter(p => (p.statusActual || '').toUpperCase().includes('EJECUCION') || (p.statusActual || '').toUpperCase().includes('EJECUCIÓN')).length;
   const enTramite = vistaProyectos.length - enEjecucion;
 
-  // Ranking Top 8 por avance
+  // Ranking Top 8 por avance documental.
+  // Solo proyectos que YA registran avance: listar ocho proyectos en 0 % no
+  // dice nada y hacía que la tarjeta pareciera rota en la vista territorial.
   const ranking = [...vistaProyectos]
-    .filter(p => p.avance !== undefined && p.avance !== null)
+    .filter(p => (p.avance || 0) > 0)
     .sort((a, b) => (b.avance || 0) - (a.avance || 0))
     .slice(0, 8);
+  const conAvanceTotal = vistaProyectos.filter(p => (p.avance || 0) > 0).length;
+
+  // Abre el proyecto en la tabla de abajo y lo trae a la vista.
+  const irAlProyecto = (id) => {
+    setExpandedRow(id);
+    requestAnimationFrame(() => {
+      document.getElementById(`fila-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
 
   // --- Embudo precontractual: cuántos proyectos hay en cada fase ---
   const embudo = FASES_EMBUDO.map(f => ({
@@ -139,6 +175,35 @@ function Dashboard() {
 
   // --- Puntos de atención: proyectos congelados ---
   const puntosAtencion = vistaProyectos.filter(p => (p.statusActual || '').toUpperCase() === 'CONGELADO');
+
+  // --- Términos: vencidos y por vencer, ordenados por urgencia ---
+  const vencidos = vistaProyectos
+    .filter(p => p.semaforo === 'vencido')
+    .sort((a, b) => (a.diasHabilesRestantes ?? 0) - (b.diasHabilesRestantes ?? 0));
+  const porVencer = vistaProyectos
+    .filter(p => p.semaforo === 'por_vencer')
+    .sort((a, b) => (a.diasHabilesRestantes ?? 0) - (b.diasHabilesRestantes ?? 0));
+  const enTermino = vistaProyectos.filter(p => p.semaforo === 'en_termino').length;
+  const sinTermino = vistaProyectos.filter(p => p.semaforo === 'sin_termino').length;
+
+  const textoPlazo = (p) => {
+    if (p.semaforo === 'sin_termino') return 'Sin término';
+    const d = p.diasHabilesRestantes;
+    if (d === null || d === undefined) return 'Sin término';
+    if (d < 0) return `Vencido hace ${Math.abs(d)} día${Math.abs(d) === 1 ? '' : 's'} hábil${Math.abs(d) === 1 ? '' : 'es'}`;
+    if (d === 0) return 'Vence hoy';
+    return `Faltan ${d} día${d === 1 ? '' : 's'} hábil${d === 1 ? '' : 'es'}`;
+  };
+
+  const ESTILO_SEMAFORO = {
+    vencido:    { punto: '#e34948', texto: 'text-red-700',    fondo: 'bg-red-50 border-red-200' },
+    por_vencer: { punto: '#eda100', texto: 'text-amber-700',  fondo: 'bg-amber-50 border-amber-200' },
+    en_termino: { punto: '#1baf7a', texto: 'text-teal',       fondo: 'bg-white border-border' },
+    sin_termino:{ punto: '#c3cad6', texto: 'text-ink-faint',  fondo: 'bg-white border-border' },
+  };
+  const estiloSemaforo = (s) => ESTILO_SEMAFORO[s] || ESTILO_SEMAFORO.sin_termino;
+
+  const formatFecha = (f) => f ? new Date(f + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
   // --- Comparativo Sede Central vs Territorial (usa TODOS los proyectos, sin filtros ni pestaña) ---
   const resumenSede = (nombreSede) => {
@@ -189,6 +254,8 @@ function Dashboard() {
       juridico: proyecto.juridico || '',
       abogado: proyecto.abogado || '',
       verificado: proyecto.verificado ?? true,
+      faseDesde: proyecto.faseDesde || '',
+      fechaLimiteManual: proyecto.fechaLimiteManual || '',
     });
     setIsModalOpen(true);
   };
@@ -403,6 +470,48 @@ function Dashboard() {
           </div>
         </div>
 
+        {/* Términos: vencidos y por vencer */}
+        {(vencidos.length > 0 || porVencer.length > 0) && (
+          <div className="border border-border rounded-[10px] shadow-sm mb-6 overflow-hidden">
+            <div className="flex items-baseline justify-between gap-2 px-5 py-3.5 bg-navy">
+              <h3 className="font-serif text-[16px] font-semibold text-white m-0">Control de términos</h3>
+              <span className="flex items-center gap-3">
+                <span className="text-[11px] text-white/60 font-mono">
+                  {enTermino} en término · {sinTermino} sin plazo
+                </span>
+                <button onClick={abrirTerminos} className="text-[11px] text-gold hover:text-white underline bg-transparent border-0 cursor-pointer">
+                  Configurar plazos
+                </button>
+              </span>
+            </div>
+            <div className="divide-y divide-border bg-card">
+              {[...vencidos, ...porVencer].map(p => {
+                const est = estiloSemaforo(p.semaforo);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => irAlProyecto(p.id)}
+                    className="w-full text-left flex items-center gap-3 px-5 py-3 bg-transparent border-0 cursor-pointer hover:bg-bg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 group"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: est.punto }}></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold text-[13px] text-ink group-hover:text-navy transition-colors">{p.nombre}</span>
+                      <span className="block text-[11px] text-ink-soft truncate">
+                        {FASES_EMBUDO.find(f => f.key === p.fase)?.label || p.fase}
+                        {p.tecnico ? ` · ${p.tecnico}` : ''}
+                      </span>
+                    </span>
+                    <span className="text-right shrink-0">
+                      <span className={`block text-[12px] font-semibold ${est.texto}`}>{textoPlazo(p)}</span>
+                      <span className="block text-[10.5px] text-ink-faint font-mono">vence {formatFecha(p.fechaLimite)}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Puntos de atención */}
         {puntosAtencion.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-[10px] p-5 shadow-sm mb-6">
@@ -467,26 +576,51 @@ function Dashboard() {
 
         {/* Ranking */}
         <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm flex flex-col mb-6">
-          <div className="flex items-baseline justify-between mb-4 gap-2">
-            <h3 className="font-serif text-[16px] font-semibold text-navy-deep m-0">Proyectos con mayor avance</h3>
-            <span className="text-[11.5px] text-ink-faint font-mono">ranking top 8</span>
+          <div className="flex items-baseline justify-between mb-1 gap-2">
+            <h3 className="font-serif text-[16px] font-semibold text-navy-deep m-0">Mayor avance documental</h3>
+            <span className="text-[11.5px] text-ink-faint font-mono">
+              {conAvanceTotal > 8 ? `8 de ${conAvanceTotal} con avance` : `${conAvanceTotal} con avance`}
+            </span>
           </div>
-          <div className="flex flex-col gap-2.5">
+          <p className="text-[12px] text-ink-soft mb-4">
+            Porcentaje de documentos del proceso ya aprobados. Haz clic en un proyecto para abrir su detalle.
+          </p>
+          <div className="flex flex-col gap-1">
             {ranking.map((p, i) => (
-              <div key={p.id} className="grid grid-cols-[22px_1fr_46px] items-center gap-2">
-                <div className="font-mono text-[11px] text-ink-faint font-bold">{i + 1}</div>
-                <div className="truncate font-semibold text-[12.5px] text-ink flex items-baseline gap-1">
-                  {p.nombre} <span className="text-[10.5px] text-ink-faint font-normal">{p.tecnico}</span>
-                  {p.verificado === false && (
-                    <span className="text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Sin verificar</span>
-                  )}
-                </div>
-                <div className="col-span-full h-1.5 bg-bg rounded overflow-hidden mt-[-4px]">
-                  <div className="h-full bg-teal rounded" style={{ width: `${p.avance || 0}%` }}></div>
-                </div>
-              </div>
+              <button
+                key={p.id}
+                onClick={() => irAlProyecto(p.id)}
+                title={`Abrir ${p.nombre}`}
+                className="w-full text-left grid grid-cols-[20px_1fr_auto] gap-x-3 gap-y-1.5 items-center py-2 px-2 -mx-2 rounded-lg bg-transparent border-0 cursor-pointer hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 transition-colors group"
+              >
+                <span className="font-mono text-[11px] text-ink-faint font-bold">{i + 1}</span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate font-semibold text-[13px] text-ink group-hover:text-navy transition-colors">{p.nombre}</span>
+                    {p.verificado === false && (
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">Sin verificar</span>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-1.5 mt-1">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: colorEstado(p.statusActual) }}></span>
+                    <span className="text-[10.5px] text-ink-soft truncate">
+                      {p.statusActual || 'Sin estado'}{p.tecnico ? ` · ${p.tecnico}` : ''}
+                    </span>
+                  </span>
+                </span>
+                <span className="font-serif text-[18px] font-semibold text-navy-deep tabular-nums">{p.avance || 0}%</span>
+                <span></span>
+                <span className="col-span-2 h-1.5 bg-bg rounded overflow-hidden">
+                  <span className="block h-full rounded" style={{ width: `${p.avance || 0}%`, background: colorEstado(p.statusActual) }}></span>
+                </span>
+              </button>
             ))}
-            {!loading && ranking.length === 0 && <div className="text-ink-faint text-sm text-center py-4">No hay datos para rankear</div>}
+            {!loading && ranking.length === 0 && (
+              <div className="text-ink-soft text-[13px] text-center py-5 leading-relaxed">
+                Ningún proyecto de esta vista registra avance documental todavía.<br />
+                <span className="text-ink-faint text-[12px]">Los avances se cargan editando cada proyecto.</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -507,13 +641,14 @@ function Dashboard() {
                   <th className="p-3 bg-navy font-semibold text-[11px] uppercase tracking-wider text-white/80 border-b border-navy-deep">Estado</th>
                   <th className="p-3 bg-navy font-semibold text-[11px] uppercase tracking-wider text-white/80 border-b border-navy-deep">Técnico</th>
                   <th className="p-3 bg-navy font-semibold text-[11px] uppercase tracking-wider text-white/80 border-b border-navy-deep">Valor</th>
+                  <th className="p-3 bg-navy font-semibold text-[11px] uppercase tracking-wider text-white/80 border-b border-navy-deep">Plazo</th>
                   <th className="p-3 bg-navy font-semibold text-[11px] uppercase tracking-wider text-white/80 border-b border-navy-deep"></th>
                 </tr>
               </thead>
               <tbody>
                 {vistaProyectos.map(p => (
                   <React.Fragment key={p.id}>
-                    <tr onClick={() => toggleRow(p.id)} className="hover:bg-bg transition-colors cursor-pointer border-b border-border last:border-0 group">
+                    <tr id={`fila-${p.id}`} onClick={() => toggleRow(p.id)} className={`hover:bg-bg transition-colors cursor-pointer border-b border-border last:border-0 group ${expandedRow === p.id ? 'bg-bg' : ''}`}>
                       <td className="p-3 font-semibold text-ink group-hover:text-navy transition-colors">
                         <span className="flex items-center gap-2">
                           {p.nombre}
@@ -533,6 +668,17 @@ function Dashboard() {
                       </td>
                       <td className="p-3">{p.tecnico || '-'}</td>
                       <td className="p-3 font-mono font-medium">{formatMoney(p.valorContrato)}</td>
+                      <td className="p-3">
+                        <span className="flex items-center gap-1.5 whitespace-nowrap">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: estiloSemaforo(p.semaforo).punto }}></span>
+                          <span className={`text-[11.5px] ${p.semaforo === 'vencido' ? 'font-semibold text-red-700' : p.semaforo === 'por_vencer' ? 'font-semibold text-amber-700' : 'text-ink-soft'}`}>
+                            {p.semaforo === 'sin_termino' ? '—'
+                              : p.diasHabilesRestantes < 0 ? `${Math.abs(p.diasHabilesRestantes)}d vencido`
+                              : p.diasHabilesRestantes === 0 ? 'hoy'
+                              : `${p.diasHabilesRestantes}d`}
+                          </span>
+                        </span>
+                      </td>
                       <td className="p-3 text-right">
                         <button onClick={(e) => openEditModal(p, e)} className="text-ink-soft hover:text-navy px-2 py-1 rounded border border-transparent hover:border-border bg-transparent hover:bg-white transition-all text-xs font-semibold">
                           Editar
@@ -542,7 +688,7 @@ function Dashboard() {
 
                     {expandedRow === p.id && (
                       <tr className="bg-bg border-b border-border">
-                        <td colSpan="7" className="p-4">
+                        <td colSpan="8" className="p-4">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-2 rounded-lg bg-white border border-border">
                             <div className="flex flex-col gap-4">
                               <div>
@@ -553,7 +699,7 @@ function Dashboard() {
                                 <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-1">Observaciones</h4>
                                 <p className="text-sm text-ink-soft leading-relaxed">{p.observaciones || '-'}</p>
                               </div>
-                              <div className="flex gap-4">
+                              <div className="flex gap-4 flex-wrap">
                                 <div>
                                   <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-1">Jurídico</h4>
                                   <p className="text-sm text-ink-soft">{p.juridico || '-'}</p>
@@ -562,6 +708,19 @@ function Dashboard() {
                                   <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-1">Abogado</h4>
                                   <p className="text-sm text-ink-soft">{p.abogado || '-'}</p>
                                 </div>
+                                <div>
+                                  <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-1">Plazo</h4>
+                                  <p className="text-sm text-ink-soft">
+                                    {p.semaforo === 'sin_termino' ? 'Sin término definido' : `${textoPlazo(p)} · vence ${formatFecha(p.fechaLimite)}`}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="border-t border-border pt-4">
+                                <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-2.5">
+                                  Historial de cambios
+                                </h4>
+                                <HistorialPanel proyectoId={p.id} />
                               </div>
                             </div>
                             <div className="border-l border-border pl-6">
@@ -575,7 +734,7 @@ function Dashboard() {
                 ))}
                 {!loading && vistaProyectos.length === 0 && (
                   <tr>
-                    <td colSpan="7" className="p-10 text-center text-ink-faint">{filtrosActivos ? 'Ningún proyecto coincide con los filtros.' : 'No hay proyectos para esta sede.'}</td>
+                    <td colSpan="8" className="p-10 text-center text-ink-faint">{filtrosActivos ? 'Ningún proyecto coincide con los filtros.' : 'No hay proyectos para esta sede.'}</td>
                   </tr>
                 )}
               </tbody>
@@ -583,6 +742,55 @@ function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Configuración de términos por fase */}
+      {terminosAbierto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm">
+          <div className="bg-card rounded-[10px] shadow-xl w-full max-w-md border border-border overflow-hidden">
+            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-navy">
+              <h3 className="font-serif text-lg font-semibold text-white">Plazos por fase</h3>
+              <button onClick={() => setTerminosAbierto(false)} className="text-white/60 hover:text-white bg-transparent border-0 cursor-pointer">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-[12.5px] text-ink-soft mb-5 leading-relaxed">
+                Días <b>hábiles</b> que puede durar cada fase, descontando fines de semana y
+                festivos colombianos. Déjalo vacío para que la fase no tenga término.
+                Al cambiar un plazo se recalculan todos los proyectos.
+              </p>
+              <div className="flex flex-col gap-3">
+                {terminos.map(t => (
+                  <div key={t.fase} className="flex items-center justify-between gap-4">
+                    <label className="text-[13px] text-ink font-medium">{t.etiqueta}</label>
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="number" min="1" max="365"
+                        defaultValue={t.dias_habiles ?? ''}
+                        disabled={guardandoTermino}
+                        onBlur={(e) => {
+                          const v = e.target.value;
+                          const actual = t.dias_habiles ?? '';
+                          if (String(v) !== String(actual)) cambiarTermino(t.fase, v);
+                        }}
+                        className="w-20 border border-border rounded-lg px-2.5 py-1.5 text-sm text-right focus:outline-none focus:border-teal bg-white disabled:opacity-50"
+                        placeholder="—"
+                      />
+                      <span className="text-[11.5px] text-ink-faint w-10">días</span>
+                    </span>
+                  </div>
+                ))}
+                {terminos.length === 0 && <p className="text-ink-faint text-sm">Cargando…</p>}
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button onClick={() => setTerminosAbierto(false)} className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-navy hover:bg-navy-deep transition-colors">
+                  Listo
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Form */}
       {isModalOpen && (
@@ -648,6 +856,24 @@ function Dashboard() {
               <div>
                 <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Avance documental (%)</label>
                 <input type="number" min="0" max="100" name="avance" value={formData.avance || 0} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" />
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide mb-1">Control de términos</p>
+                <p className="text-[11.5px] text-ink-faint mb-3 leading-relaxed">
+                  El vencimiento se calcula solo, sumando los días hábiles de la fase a la fecha de entrada.
+                  Usa la fecha límite propia únicamente si este proceso tiene un plazo distinto al estándar.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Entró a la fase el</label>
+                    <input type="date" name="faseDesde" value={formData.faseDesde || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Fecha límite propia</label>
+                    <input type="date" name="fechaLimiteManual" value={formData.fechaLimiteManual || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="opcional" />
+                  </div>
+                </div>
               </div>
 
               <div>
