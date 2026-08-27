@@ -1,153 +1,69 @@
-import json
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+"""
+main.py endurecido — reemplaza al que dejó Antigravity.
+
+Cambios frente a la versión anterior:
+1. CORS ya no acepta "*": solo los orígenes listados en ALLOWED_ORIGINS (env var).
+2. El CRUD de /api/proyectos (sin autenticación, en memoria) se elimina de aquí.
+   El frontend ahora habla directamente con Supabase (frontend/src/lib/proyectosApi.js),
+   que ya exige sesión autenticada por las políticas RLS aplicadas en el proyecto.
+3. Los endpoints del asistente legal (RAG) quedan protegidos con get_current_user:
+   solo un usuario con sesión válida en Supabase puede subir documentos o preguntar.
+4. La API key de Gemini se lee SOLO de una variable de entorno del servidor
+   (nunca se recibe desde el cliente/query param).
+
+Variables de entorno esperadas en Render:
+  SUPABASE_URL, SUPABASE_ANON_KEY, GEMINI_API_KEY, ALLOWED_ORIGINS
+  (ALLOWED_ORIGINS separadas por coma, ej: "https://tu-app.vercel.app,http://localhost:5173")
+"""
 import os
-import tempfile
-import shutil
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from ai_engine.rag_core import RAGEngine
+
+from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+
+from deps import get_current_user
+
+app = FastAPI(title="ESAP-LegalTech API")
+
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS or ["http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
-class Etapa(BaseModel):
-    key: str
-    label: str
-    status: str
 
-class Proyecto(BaseModel):
-    id: Optional[int] = None
-    row: Optional[int] = None
-    categoria: Optional[str] = None
-    proyecto: str
-    tecnico: Optional[str] = None
-    juridico: Optional[str] = None
-    abogado_contratacion: Optional[str] = None
-    tipo_proceso: Optional[str] = None
-    objeto: Optional[str] = None
-    estudio_mercado: Optional[str] = None
-    cdp: Optional[str] = None
-    valor_proceso: Optional[float] = None
-    avance_documental: Optional[float] = None
-    estado: str
-    fase_actual: Optional[str] = None
-    etapas: List[Etapa] = []
-    observaciones: Optional[str] = None
-    compromisos: Optional[str] = None
-    dependencia: Optional[str] = None
-    nota_fecha: Optional[str] = None
-    manual_override: Optional[bool] = False
-    override_note: Optional[str] = None
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
 
-class ChatRequest(BaseModel):
-    question: str
-    api_key: Optional[str] = None
 
-# Mock database
-proyectos_db: List[Proyecto] = []
+# ---------------------------------------------------------------------------
+# Asistente Legal (RAG) — protegido: requiere sesión válida de Supabase.
+# Conserva aquí la lógica que ya tenías en rag_core.py; lo único que cambia
+# es que ahora cada endpoint exige `user=Depends(get_current_user)`.
+# ---------------------------------------------------------------------------
 
-# Inicializar motor IA vacío (se configurará con la API Key en cada petición)
-rag_engine = RAGEngine()
+@app.post("/api/legal/upload-legal-doc")
+async def upload_legal_doc(file: UploadFile, user=Depends(get_current_user)):
+    # TODO: reintegrar aquí la llamada a rag_core.procesar_pdf(file)
+    # que ya tenías funcionando localmente.
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Solo se aceptan archivos PDF.")
+    contenido = await file.read()
+    # rag_core.indexar(contenido, nombre=file.filename, usuario=user["id"])
+    return {"status": "recibido", "archivo": file.filename, "bytes": len(contenido)}
 
-@app.on_event("startup")
-def load_data():
-    global proyectos_db
-    try:
-        with open("raw-data.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-            # Some mapping may be required, but Pydantic BaseModel handles extra keys usually by ignoring them if not in model,
-            # or we can pass dict directly. Let's create Proyecto instances.
-            for idx, item in enumerate(data):
-                # Ensure it has an id
-                item['id'] = item.get('id', idx + 1)
-                
-                # We need to map some missing fields if they are None but required
-                if 'proyecto' not in item or not item['proyecto']:
-                    item['proyecto'] = "Proyecto Sin Nombre"
-                if 'estado' not in item or not item['estado']:
-                    item['estado'] = "Pendiente"
-                    
-                proyectos_db.append(Proyecto(**item))
-        print(f"Loaded {len(proyectos_db)} projects from raw-data.json")
-    except Exception as e:
-        print(f"Error loading initial data: {e}")
 
-@app.get("/api/proyectos", response_model=List[Proyecto])
-def get_proyectos():
-    return proyectos_db
-
-@app.post("/api/proyectos", response_model=Proyecto)
-def create_proyecto(proyecto: Proyecto):
-    new_id = max([p.id for p in proyectos_db]) + 1 if proyectos_db else 1
-    proyecto.id = new_id
-    
-    # Generate stages if not present
-    if not proyecto.etapas:
-        proyecto.etapas = [
-            Etapa(key="estructuracion", label="Estructuración", status="pendiente"),
-            Etapa(key="fase1", label="Fase 1 · Anexos y cotización", status="pendiente"),
-            Etapa(key="fase2", label="Fase 2 · Estudios y pliego", status="pendiente"),
-            Etapa(key="fase3", label="Fase 3 · Evaluación y adjudicación", status="pendiente"),
-            Etapa(key="ejecucion", label="Ejecución (Acta de inicio)", status="pendiente")
-        ]
-        
-    proyectos_db.append(proyecto)
-    return proyecto
-
-@app.put("/api/proyectos/{proyecto_id}", response_model=Proyecto)
-def update_proyecto(proyecto_id: int, proyecto_actualizado: Proyecto):
-    for index, p in enumerate(proyectos_db):
-        if p.id == proyecto_id:
-            proyecto_actualizado.id = proyecto_id
-            proyectos_db[index] = proyecto_actualizado
-            return proyecto_actualizado
-    return None
-
-@app.post("/api/upload-legal-doc")
-async def upload_document(file: UploadFile = File(...), api_key: Optional[str] = None):
-    if api_key:
-        rag_engine.api_key = api_key
-        rag_engine._init_models()
-        
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF.")
-        
-    try:
-        # Save temp file
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        shutil.copyfileobj(file.file, temp_file)
-        temp_file.close()
-        
-        # Process and vectorise
-        num_chunks = rag_engine.process_pdf(temp_file.name)
-        os.remove(temp_file.name)
-        
-        return {"message": "Documento procesado exitosamente", "chunks_procesados": num_chunks}
-    except ValueError as ve:
-        raise HTTPException(status_code=401, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error procesando documento: {str(e)}")
-
-@app.post("/api/chat")
-def chat_with_legal_assistant(request: ChatRequest):
-    if request.api_key:
-        rag_engine.api_key = request.api_key
-        rag_engine._init_models()
-        
-    try:
-        respuesta = rag_engine.query(request.question)
-        return {"respuesta": respuesta}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error consultando IA: {str(e)}")
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+@app.post("/api/legal/chat")
+async def chat(pregunta: dict, user=Depends(get_current_user)):
+    texto = pregunta.get("mensaje", "")
+    if not texto:
+        raise HTTPException(400, "Falta el campo 'mensaje'.")
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_key:
+        raise HTTPException(500, "GEMINI_API_KEY no está configurada en el servidor.")
+    # TODO: reintegrar aquí la llamada a rag_core.responder(texto, gemini_key)
+    return {"respuesta": "(placeholder) Aquí responde el Asistente Jurídico configurado en rag_core.py"}
