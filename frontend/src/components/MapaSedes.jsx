@@ -56,9 +56,10 @@ const ETIQUETA_TIPO = { central: 'Sede Central', territorial: 'Dirección Territ
 const COLOR_SEMAFORO = { vencido: '#e34948', por_vencer: '#eda100', en_termino: '#1baf7a', sin_termino: '#c3cad6' }
 
 const FASES = {
-  necesidad: 'Sin iniciar', estructuracion: 'Estructuración', fase1: 'Fase 1 · Anexos',
-  fase2: 'Fase 2 · Estudios', fase3: 'Fase 3 · Adjudicación', ejecucion: 'Ejecución',
-  liquidacion: 'Liquidación',
+  necesidad: 'Necesidad (PAA)', estructuracion: 'Estructuración',
+  radicado: 'Radicado y en revisión', seleccion: 'Selección publicada',
+  adjudicacion: 'Adjudicación', perfeccionamiento: 'Perfeccionamiento',
+  ejecucion: 'En ejecución', liquidacion: 'Liquidación', cerrado: 'Cerrado',
 }
 
 export default function MapaSedes({ proyectos = [], presentacion = false }) {

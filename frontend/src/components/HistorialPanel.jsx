@@ -8,7 +8,7 @@ const ETIQUETAS = {
   juridico: 'Jurídico (campo unificado con Abogado)', financiero: 'Financiero', supervisor: 'Supervisor',
   contratista: 'Contratista', fase: 'Fase', avance: 'Avance documental',
   avance_contractual: 'Avance contractual', adjudicado: 'Adjudicado',
-  status_actual: 'Estado', observaciones: 'Observaciones', verificado: 'Verificado',
+  status_actual: 'Situación del proceso', estado_otro: 'Detalle de la situación', observaciones: 'Observaciones', verificado: 'Verificado',
   fase_desde: 'Entrada a la fase', fecha_limite_manual: 'Fecha límite propia',
   numero_secop: 'Número SECOP', secop: 'Enlace SECOP', ruta_documentos: 'Carpeta',
   pagado: 'Pagado', actas_pago: 'Actas de pago', retencion: 'Retención',
@@ -18,9 +18,10 @@ const ETIQUETAS = {
 }
 
 const FASES = {
-  necesidad: 'Sin iniciar', estructuracion: 'Estructuración', fase1: 'Fase 1 · Anexos',
-  fase2: 'Fase 2 · Estudios', fase3: 'Fase 3 · Adjudicación', ejecucion: 'Ejecución',
-  liquidacion: 'Liquidación',
+  necesidad: 'Necesidad (PAA)', estructuracion: 'Estructuración',
+  radicado: 'Radicado y en revisión', seleccion: 'Selección publicada',
+  adjudicacion: 'Adjudicación', perfeccionamiento: 'Perfeccionamiento',
+  ejecucion: 'En ejecución', liquidacion: 'Liquidación', cerrado: 'Cerrado',
 }
 
 function mostrar(campo, valor) {

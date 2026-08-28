@@ -85,13 +85,14 @@ export default function FichaProyecto({ proyecto, textoPlazo, formatFecha, color
         <p className="text-[10.5px] text-ink-faint mb-2.5 mt-[-6px] leading-snug">
           Cada etapa se mide con su propia unidad; la de tu etapa actual va resaltada.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
           {[
-            { t: 'Estructuración', v: proyecto.avanceEstructuracion, d: 'Actividades de planeación y precontractual', c: '#37568f' },
-            { t: 'Ejecución de obra', v: proyecto.avanceEjecucion, d: proyecto.ultimoCorte ? `Último corte ${formatFecha(proyecto.ultimoCorte)}` : 'Sin reportes semanales', c: '#2a78d6' },
-            { t: 'Liquidación', v: proyecto.avanceLiquidacion, d: 'Actividades poscontractuales', c: '#B08D3F' },
+            { t: 'Planeación', v: proyecto.avancePlaneacion, d: 'Documentos previos del área', c: '#8ea3c9', etapa: 'planeacion' },
+            { t: 'Precontractual', v: proyecto.avancePrecontractual, d: 'Trámite del proceso de selección', c: '#37568f', etapa: 'precontractual' },
+            { t: 'Ejecución de obra', v: proyecto.avanceEjecucion, d: proyecto.ultimoCorte ? `Último corte ${formatFecha(proyecto.ultimoCorte)}` : 'Sin reportes semanales', c: '#1A7A6E', etapa: 'contractual' },
+            { t: 'Liquidación', v: proyecto.avanceLiquidacion, d: 'Actividades poscontractuales', c: '#B08D3F', etapa: 'poscontractual' },
           ].map(x => (
-            <div key={x.t} className={`border rounded-lg p-3 ${UNIDAD[proyecto.etapaActual] && x.t.toLowerCase().startsWith(UNIDAD[proyecto.etapaActual].slice(0,6)) ? 'border-navy bg-navy/5' : 'border-border bg-white'}`}>
+            <div key={x.t} className={`border rounded-lg p-3 ${x.etapa === proyecto.etapaActual ? 'border-navy bg-navy/5' : 'border-border bg-white'}`}>
               <p className="font-mono text-[9px] tracking-widest uppercase text-ink-faint font-semibold m-0">{x.t}</p>
               <p className="font-serif text-[19px] font-semibold text-navy-deep m-0 mt-0.5 leading-none">{x.v ?? 0}%</p>
               <span className="block h-1 bg-bg rounded overflow-hidden mt-1.5">

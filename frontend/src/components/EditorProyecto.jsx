@@ -32,7 +32,7 @@ const inputCls = 'w-full border border-border rounded-lg px-3 py-2 text-sm focus
 
 export default function EditorProyecto({
   proyecto, formData, onChange, onGuardar, onCerrar, esNuevo,
-  tiposProceso, estadosProceso, fases, guardando, onEliminar,
+  tiposProceso, estadosProceso, fases, etapas, guardando, onEliminar,
 }) {
   const [pestana, setPestana] = useState('datos')
   const [sedes, setSedes] = useState([])
@@ -117,17 +117,34 @@ export default function EditorProyecto({
                     {tiposProceso.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </Campo>
-                <Campo label="Estado">
+                <Campo label="Fase" ayuda="Cada fase es un hito del Manual de Contratación y define la etapa, el término y con qué se mide el avance">
+                  <select name="fase" value={formData.fase || 'necesidad'} onChange={onChange} className={inputCls}>
+                    {(etapas || []).map(et => (
+                      <optgroup key={et.key} label={et.label}>
+                        {fases.filter(f => f.etapa === et.key).map(f => (
+                          <option key={f.key} value={f.key}>{f.label}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </Campo>
+                <Campo label="Situación" ayuda="No repite la fase: dice si el trámite corre, está detenido o terminó de forma anormal">
                   <select name="statusActual" value={formData.statusActual || ''} onChange={onChange} className={inputCls}>
                     <option value="">Seleccione…</option>
                     {estadosProceso.map(e => <option key={e} value={e}>{e}</option>)}
                   </select>
                 </Campo>
-                <Campo label="Fase">
-                  <select name="fase" value={formData.fase || 'necesidad'} onChange={onChange} className={inputCls}>
-                    {fases.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-                  </select>
-                </Campo>
+                {formData.statusActual === 'OTRO' && (
+                  <Campo label="¿Cuál situación?" ancho={2} ayuda="Obligatorio cuando la situación es «OTRO»: si se deja vacío, la base rechaza el guardado">
+                    <input
+                      name="estadoOtro"
+                      value={formData.estadoOtro || ''}
+                      onChange={onChange}
+                      className={inputCls}
+                      placeholder="Ej. En espera de concepto del Comité de Contratación"
+                    />
+                  </Campo>
+                )}
                 <Campo label="Sede">
                   <select name="sede" value={formData.sede || ''} onChange={onChange} className={inputCls}>
                     <option value="Sede Central">Sede Central</option>

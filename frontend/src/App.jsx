@@ -25,29 +25,51 @@ const TIPOS_PROCESO = [
   'Contratación Directa',
 ]
 
+// El estado NO nombra el paso del proceso —eso lo dice la fase—, sino la
+// SITUACIÓN: si el trámite corre, está detenido o terminó de forma anormal.
+// Antes tenía valores como EN ESTRUCTURACIÓN o EN EJECUCIÓN, que duplicaban la
+// fase y producían proyectos contradictorios consigo mismos.
 const ESTADOS_PROCESO = [
-  'SIN INICIAR',
-  'EN ESTRUCTURACIÓN',
-  'EN PROYECCIÓN',
-  'EN AJUSTE',
-  'EN REVISIÓN',
   'EN TRÁMITE',
-  'EN ADJUDICACIÓN',
-  'EN EJECUCIÓN',
+  'EN AJUSTE',
+  'SUSPENDIDO',
   'CONGELADO',
-  'LIQUIDADO',
+  'DESIERTO',
+  'REVOCADO',
+  'TERMINADO ANTICIPADAMENTE',
+  'OTRO',
 ]
 
-// Fases del embudo precontractual. El `key` es lo que se guarda en la
-// columna `fase`; el `label` es lo que ve el usuario.
+// Fases del proceso. Cada una es un HITO JURÍDICO verificable del Manual de
+// Contratación de la ESAP (BS-MA-001 v.2, Resolución 1559 de 2025), agrupado en
+// las cuatro etapas que el propio Manual define en el numeral 2.1.
+//
+// Los cortes entre etapas no son de criterio: los fija el Manual.
+//   · Planeación termina con la RADICACIÓN de los estudios previos (num. 3.1).
+//   · Precontractual inicia con esa radicación en la Dirección de Contratación
+//     o en el área jurídica de la Territorial (num. 3.2).
+//   · Contractual inicia con el PERFECCIONAMIENTO del contrato (num. 2.1).
+//   · Poscontractual son las actividades posteriores al vencimiento del plazo.
+//
+// Por eso el anexo técnico y los estudios previos son planeación, no
+// precontractual: antes de radicar no hay etapa precontractual que corra.
+const ETAPAS = [
+  { key: 'planeacion',     label: 'Planeación',     color: '#8ea3c9' },
+  { key: 'precontractual', label: 'Precontractual', color: '#37568f' },
+  { key: 'contractual',    label: 'Contractual',    color: '#1A7A6E' },
+  { key: 'poscontractual', label: 'Poscontractual', color: '#B08D3F' },
+]
+
 const FASES_EMBUDO = [
-  { key: 'necesidad', label: 'Sin iniciar', color: '#b8c4dc' },
-  { key: 'estructuracion', label: 'Estructuración', color: '#8ea3c9' },
-  { key: 'fase1', label: 'Fase 1 · Anexos', color: '#5c7ab0' },
-  { key: 'fase2', label: 'Fase 2 · Estudios', color: '#37568f' },
-  { key: 'fase3', label: 'Fase 3 · Adjudicación', color: '#1f3a6b' },
-  { key: 'ejecucion', label: 'Ejecución', color: '#0A1730' },
-  { key: 'liquidacion', label: 'Liquidación', color: '#B08D3F' },
+  { key: 'necesidad',         etapa: 'planeacion',     label: 'Necesidad (PAA)',        color: '#b8c4dc' },
+  { key: 'estructuracion',    etapa: 'planeacion',     label: 'Estructuración',         color: '#8ea3c9' },
+  { key: 'radicado',          etapa: 'precontractual', label: 'Radicado y en revisión', color: '#5c7ab0' },
+  { key: 'seleccion',         etapa: 'precontractual', label: 'Selección publicada',    color: '#37568f' },
+  { key: 'adjudicacion',      etapa: 'precontractual', label: 'Adjudicación',           color: '#1f3a6b' },
+  { key: 'perfeccionamiento', etapa: 'contractual',    label: 'Perfeccionamiento',      color: '#2f8f83' },
+  { key: 'ejecucion',         etapa: 'contractual',    label: 'En ejecución',           color: '#1A7A6E' },
+  { key: 'liquidacion',       etapa: 'poscontractual', label: 'Liquidación',            color: '#C9A44C' },
+  { key: 'cerrado',           etapa: 'poscontractual', label: 'Cerrado',                color: '#8A6D2F' },
 ]
 
 // Cada etapa mide el avance con su propia unidad. Sin esto, un proyecto en obra
@@ -187,19 +209,25 @@ function Dashboard() {
     ...f,
     count: vistaProyectos.filter(p => (p.fase || 'necesidad') === f.key).length,
   }));
+  // Conteo por etapa del Manual, que es la agrupación con valor jurídico.
+  const porEtapa = ETAPAS.map(e => ({
+    ...e,
+    count: embudo.filter(f => f.etapa === e.key).reduce((a, f) => a + f.count, 0),
+  }));
   const embudoMax = Math.max(1, ...embudo.map(f => f.count));
 
   // --- Distribución por estado ---
+  // Verde: el trámite corre. Ámbar: detenido pero recuperable. Rojo: terminó
+  // sin contrato o sin ejecución.
   const COLORES_ESTADO = {
-    'SIN INICIAR': '#2a78d6',
-    'EN ESTRUCTURACIÓN': '#eb6834',
-    'EN EJECUCIÓN': '#1baf7a',
-    'EN AJUSTE': '#eda100',
-    'EN ADJUDICACIÓN': '#008300',
-    'EN REVISIÓN': '#4a3aa7',
-    'CONGELADO': '#e34948',
     'EN TRÁMITE': '#0f766e',
-    'EN PROYECCIÓN': '#7c8ba1',
+    'EN AJUSTE': '#eda100',
+    'SUSPENDIDO': '#eb6834',
+    'CONGELADO': '#e34948',
+    'DESIERTO': '#8a5cf6',
+    'REVOCADO': '#b3261e',
+    'TERMINADO ANTICIPADAMENTE': '#7c8ba1',
+    'OTRO': '#4a3aa7',
   };
   const colorEstado = (estado) => COLORES_ESTADO[(estado || '').toUpperCase()] || '#8892a6';
   const estadosCount = {};
@@ -263,7 +291,7 @@ function Dashboard() {
   // El editor maneja TODOS los campos del proyecto. La ficha de consulta es
   // aparte y es de solo lectura.
   const CAMPOS_EDITABLES = [
-    'nombre','tipo','statusActual','fase','sede','objeto','observaciones','verificado',
+    'nombre','tipo','statusActual','estadoOtro','fase','sede','objeto','observaciones','verificado',
     'tecnico','abogado','financiero','apoyoSupervision','supervisor','contratista','equipoActual',
     'cdp','valorContrato',
     'adjudicado','adicion','valorAdicion','pagado','actasPago','retencion',
@@ -274,7 +302,7 @@ function Dashboard() {
   const abrirNuevo = () => {
     setEditingId(null);
     setFormData({
-      nombre: '', tipo: '', statusActual: 'SIN INICIAR', fase: 'necesidad',
+      nombre: '', tipo: '', statusActual: 'EN TRÁMITE', fase: 'necesidad',
       tecnico: '', valorContrato: '',
       sede: tab === 'sede' ? 'Sede Central' : 'Territorial',
       verificado: true,
@@ -632,21 +660,42 @@ function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm">
             <div className="flex items-baseline justify-between mb-4 gap-2">
-              <h3 className="font-serif text-[16px] font-semibold text-navy-deep m-0">Embudo precontractual</h3>
-              <span className="text-[11.5px] text-ink-faint font-mono">por fase</span>
+              <h3 className="font-serif text-[16px] font-semibold text-navy-deep m-0">Ruta contractual</h3>
+              <span className="text-[11.5px] text-ink-faint font-mono">Manual BS-MA-001</span>
             </div>
-            <div className="flex flex-col gap-2.5">
-              {embudo.map(f => (
-                <div key={f.key} className="grid grid-cols-[110px_1fr_28px] items-center gap-2">
-                  <div className="text-[11px] text-ink-soft font-semibold truncate">{f.label}</div>
-                  <div className="h-5 bg-bg rounded overflow-hidden">
-                    <div className="h-full rounded flex items-center justify-end pr-1.5" style={{ width: `${(f.count / embudoMax) * 100}%`, background: f.color, minWidth: f.count > 0 ? '10px' : 0 }}></div>
+            <div className="flex flex-col gap-3">
+              {ETAPAS.map(e => {
+                const fasesDeEtapa = embudo.filter(f => f.etapa === e.key);
+                const totalEtapa = porEtapa.find(x => x.key === e.key)?.count ?? 0;
+                return (
+                  <div key={e.key}>
+                    <div className="flex items-baseline justify-between mb-1.5 pb-1 border-b border-border">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider" style={{ color: e.color }}>
+                        {e.label}
+                      </span>
+                      <span className="text-[11px] font-mono font-semibold text-ink-soft tabular-nums">{totalEtapa}</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {fasesDeEtapa.map(f => (
+                        <div key={f.key} className="grid grid-cols-[124px_1fr_28px] items-center gap-2">
+                          <div className="text-[11px] text-ink-soft font-semibold truncate">{f.label}</div>
+                          <div className="h-4 bg-bg rounded overflow-hidden">
+                            <div className="h-full rounded" style={{ width: `${(f.count / embudoMax) * 100}%`, background: f.color, minWidth: f.count > 0 ? '10px' : 0 }}></div>
+                          </div>
+                          <div className="text-[12px] font-mono font-semibold text-ink text-right tabular-nums">{f.count}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="text-[12px] font-mono font-semibold text-ink text-right">{f.count}</div>
-                </div>
-              ))}
+                );
+              })}
               {!loading && vistaProyectos.length === 0 && <div className="text-ink-faint text-sm text-center py-4">Sin datos</div>}
             </div>
+            <p className="text-[10.5px] text-ink-faint leading-snug mt-3.5 pt-3 border-t border-border">
+              La planeación termina con la radicación de los estudios previos y ahí empieza
+              la precontractual; la contractual empieza con el perfeccionamiento del contrato
+              (Manual de Contratación, num. 2.1 y 3.2).
+            </p>
           </div>
 
           <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm">
@@ -761,7 +810,7 @@ function Dashboard() {
                       </td>
                       <td className="p-3">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-bold text-white ${(p.statusActual || '').toUpperCase().includes('EJECUCI') ? 'bg-teal' : 'bg-navy'}`}>
-                          {p.statusActual || 'SIN ESTADO'}
+                          {p.statusActual === 'OTRO' ? (p.estadoOtro || 'OTRO') : (p.statusActual || 'SIN ESTADO')}
                         </span>
                       </td>
                       <td className="p-3">{p.tecnico || '-'}</td>
@@ -874,6 +923,7 @@ function Dashboard() {
           tiposProceso={TIPOS_PROCESO}
           estadosProceso={ESTADOS_PROCESO}
           fases={FASES_EMBUDO}
+          etapas={ETAPAS}
           guardando={guardandoProyecto}
           onEliminar={mandarAPapelera}
         />
