@@ -4,8 +4,8 @@ import { useAuth } from './lib/AuthProvider'
 import Login from './components/Login'
 import UpdatePassword from './components/UpdatePassword'
 import Logo from './components/Logo'
-import DocumentosPanel from './components/DocumentosPanel'
-import HistorialPanel from './components/HistorialPanel'
+import FichaProyecto from './components/FichaProyecto'
+import EditorProyecto from './components/EditorProyecto'
 import MapaSedes from './components/MapaSedes'
 import { listProyectos, createProyecto, updateProyecto, listTerminos, guardarTermino } from './lib/proyectosApi'
 
@@ -88,6 +88,7 @@ function Dashboard() {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({});
   const [expandedRow, setExpandedRow] = useState(null);
+  const [guardandoProyecto, setGuardandoProyecto] = useState(false);
 
   const fetchProyectos = () => {
     setLoading(true);
@@ -220,57 +221,56 @@ function Dashboard() {
   const resumenCentral = resumenSede('Sede Central');
   const resumenTerritorial = resumenSede('Territorial');
 
-  const openAddModal = () => {
+  // El editor maneja TODOS los campos del proyecto. La ficha de consulta es
+  // aparte y es de solo lectura.
+  const CAMPOS_EDITABLES = [
+    'nombre','tipo','statusActual','fase','sede','objeto','observaciones','verificado',
+    'tecnico','juridico','abogado','financiero','apoyoSupervision','supervisor','contratista','equipoActual',
+    'cdp','valorContrato','avance','avanceContractual','avancePoscontractual',
+    'adjudicado','adicion','valorAdicion','pagado','actasPago','retencion',
+    'numeroSecop','secop','rutaDocumentos',
+    'faseDesde','fechaLimiteManual','fechaInicio','fechaFin','fechaActaFinal',
+  ];
+
+  const abrirNuevo = () => {
     setEditingId(null);
     setFormData({
-      nombre: '',
-      tipo: '',
-      statusActual: 'EN ESTRUCTURACION',
-      fase: 'necesidad',
-      tecnico: '',
-      valorContrato: '',
-      avance: 0,
+      nombre: '', tipo: '', statusActual: 'SIN INICIAR', fase: 'necesidad',
+      tecnico: '', valorContrato: '', avance: 0,
       sede: tab === 'sede' ? 'Sede Central' : 'Territorial',
       verificado: true,
     });
     setIsModalOpen(true);
   };
 
-  const openEditModal = (proyecto, e) => {
-    e.stopPropagation();
+  const abrirEditor = (proyecto, e) => {
+    e?.stopPropagation?.();
     setEditingId(proyecto.id);
-    setFormData({
-      nombre: proyecto.nombre,
-      tipo: proyecto.tipo || '',
-      statusActual: proyecto.statusActual || '',
-      fase: proyecto.fase || 'necesidad',
-      tecnico: proyecto.tecnico || '',
-      // ?? y no || : un valor nulo debe quedar vacío, NO convertirse en 0
-      // (perderíamos la diferencia entre "sin valor registrado" y "vale $0").
-      valorContrato: proyecto.valorContrato ?? '',
-      avance: proyecto.avance || 0,
-      sede: proyecto.sede,
-      objeto: proyecto.objeto || '',
-      observaciones: proyecto.observaciones || '',
-      juridico: proyecto.juridico || '',
-      abogado: proyecto.abogado || '',
-      verificado: proyecto.verificado ?? true,
-      faseDesde: proyecto.faseDesde || '',
-      fechaLimiteManual: proyecto.fechaLimiteManual || '',
-    });
+    const datos = {};
+    for (const c of CAMPOS_EDITABLES) {
+      const v = proyecto[c];
+      datos[c] = v === null || v === undefined ? (typeof v === 'boolean' ? v : '') : v;
+    }
+    // Los booleanos deben conservar false, no volverse cadena vacía.
+    datos.verificado  = proyecto.verificado ?? true;
+    datos.adjudicado  = !!proyecto.adjudicado;
+    datos.adicion     = !!proyecto.adicion;
+    datos.fase        = proyecto.fase || 'necesidad';
+    datos.avance      = proyecto.avance ?? 0;
+    setFormData(datos);
     setIsModalOpen(true);
   };
 
-  const closeModal = () => setIsModalOpen(false);
+  const cerrarEditor = () => setIsModalOpen(false);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     let val;
     if (type === 'checkbox') {
       val = checked;
-    } else if (name === 'avance') {
+    } else if (['avance','avanceContractual','avancePoscontractual'].includes(name)) {
       val = Math.max(0, Math.min(100, parseFloat(value) || 0));
-    } else if (name === 'valorContrato') {
+    } else if (['valorContrato','cdp','valorAdicion','pagado','actasPago','retencion'].includes(name)) {
       // Vacío se conserva vacío (se guardará como NULL), no como 0.
       val = value === '' ? '' : (parseFloat(value) || 0);
     } else {
@@ -281,6 +281,7 @@ function Dashboard() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    setGuardandoProyecto(true);
     try {
       if (editingId) {
         await updateProyecto(editingId, formData);
@@ -289,10 +290,12 @@ function Dashboard() {
         await createProyecto({ id, ...formData });
       }
       fetchProyectos();
-      closeModal();
+      cerrarEditor();
     } catch (err) {
       console.error("Error saving proyecto", err);
       alert('No se pudo guardar: ' + err.message);
+    } finally {
+      setGuardandoProyecto(false);
     }
   };
 
@@ -441,7 +444,7 @@ function Dashboard() {
               ⬇ Exportar CSV
             </button>
             <button
-              onClick={openAddModal}
+              onClick={abrirNuevo}
               className="bg-navy hover:bg-navy-deep text-white font-semibold py-2.5 px-5 rounded-lg shadow transition-colors text-sm tracking-wide"
             >
               + Nuevo Proyecto
@@ -703,7 +706,7 @@ function Dashboard() {
                         </span>
                       </td>
                       <td className="p-3 text-right">
-                        <button onClick={(e) => openEditModal(p, e)} className="text-ink-soft hover:text-navy px-2 py-1 rounded border border-transparent hover:border-border bg-transparent hover:bg-white transition-all text-xs font-semibold">
+                        <button onClick={(e) => abrirEditor(p, e)} className="text-ink-soft hover:text-navy px-2 py-1 rounded border border-transparent hover:border-border bg-transparent hover:bg-white transition-all text-xs font-semibold">
                           Editar
                         </button>
                       </td>
@@ -712,44 +715,14 @@ function Dashboard() {
                     {expandedRow === p.id && (
                       <tr className="bg-bg border-b border-border">
                         <td colSpan="8" className="p-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-2 rounded-lg bg-white border border-border">
-                            <div className="flex flex-col gap-4">
-                              <div>
-                                <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-1">Objeto</h4>
-                                <p className="text-sm text-ink-soft leading-relaxed">{p.objeto || 'No especificado.'}</p>
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-1">Observaciones</h4>
-                                <p className="text-sm text-ink-soft leading-relaxed">{p.observaciones || '-'}</p>
-                              </div>
-                              <div className="flex gap-4 flex-wrap">
-                                <div>
-                                  <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-1">Jurídico</h4>
-                                  <p className="text-sm text-ink-soft">{p.juridico || '-'}</p>
-                                </div>
-                                <div>
-                                  <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-1">Abogado</h4>
-                                  <p className="text-sm text-ink-soft">{p.abogado || '-'}</p>
-                                </div>
-                                <div>
-                                  <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-1">Plazo</h4>
-                                  <p className="text-sm text-ink-soft">
-                                    {p.semaforo === 'sin_termino' ? 'Sin término definido' : `${textoPlazo(p)} · vence ${formatFecha(p.fechaLimite)}`}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="border-t border-border pt-4">
-                                <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-2.5">
-                                  Historial de cambios
-                                </h4>
-                                <HistorialPanel proyectoId={p.id} />
-                              </div>
-                            </div>
-                            <div className="border-l border-border pl-6">
-                              <DocumentosPanel proyecto={p} onSaved={fetchProyectos} />
-                            </div>
-                          </div>
+                          <FichaProyecto
+                            proyecto={p}
+                            textoPlazo={textoPlazo}
+                            formatFecha={formatFecha}
+                            colorEstado={colorEstado}
+                            onEditar={abrirEditor}
+                            onSaved={fetchProyectos}
+                          />
                         </td>
                       </tr>
                     )}
@@ -817,128 +790,22 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Modal Form */}
+      {/* Editor: panel de edición completo, independiente de la ficha */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm">
-          <div className="bg-card rounded-[10px] shadow-xl w-full max-w-lg border border-border overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-navy shrink-0">
-              <h3 className="font-serif text-lg font-semibold text-white">{editingId ? 'Editar Proyecto' : 'Nuevo Proyecto'}</h3>
-              <button onClick={closeModal} className="text-white/60 hover:text-white">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-              </button>
-            </div>
-
-            <form onSubmit={handleSave} className="p-6 flex flex-col gap-4 overflow-y-auto">
-              <div>
-                <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Nombre del Proyecto</label>
-                <input required type="text" name="nombre" value={formData.nombre || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Ej. Adecuación de aulas..." />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Tipo de Proceso</label>
-                  <select name="tipo" value={formData.tipo || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white">
-                    <option value="">Seleccione...</option>
-                    {TIPOS_PROCESO.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Estado</label>
-                  <select name="statusActual" value={formData.statusActual || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white">
-                    <option value="">Seleccione...</option>
-                    {ESTADOS_PROCESO.map(e => <option key={e} value={e}>{e}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Fase</label>
-                  <select name="fase" value={formData.fase || 'necesidad'} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white">
-                    {FASES_EMBUDO.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Sede</label>
-                  <select name="sede" value={formData.sede || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white">
-                    <option value="Sede Central">Sede Central</option>
-                    <option value="Territorial">Territorial</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Técnico a cargo</label>
-                  <input type="text" name="tecnico" value={formData.tecnico || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Nombre completo" />
-                </div>
-                <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Valor Estimado</label>
-                  <input type="number" name="valorContrato" value={formData.valorContrato ?? ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Déjalo vacío si aún no hay valor" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Avance documental (%)</label>
-                <input type="number" min="0" max="100" name="avance" value={formData.avance || 0} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" />
-              </div>
-
-              <div className="border-t border-border pt-4">
-                <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide mb-1">Control de términos</p>
-                <p className="text-[11.5px] text-ink-faint mb-3 leading-relaxed">
-                  El vencimiento se calcula solo, sumando los días hábiles de la fase a la fecha de entrada.
-                  Usa la fecha límite propia únicamente si este proceso tiene un plazo distinto al estándar.
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Entró a la fase el</label>
-                    <input type="date" name="faseDesde" value={formData.faseDesde || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Fecha límite propia</label>
-                    <input type="date" name="fechaLimiteManual" value={formData.fechaLimiteManual || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="opcional" />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Objeto</label>
-                <textarea name="objeto" value={formData.objeto || ''} onChange={handleInputChange} rows={3} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white resize-y" placeholder="Descripción del objeto contractual..." />
-              </div>
-
-              <div>
-                <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Observaciones</label>
-                <textarea name="observaciones" value={formData.observaciones || ''} onChange={handleInputChange} rows={3} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white resize-y" placeholder="Notas, alertas, seguimiento..." />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Jurídico</label>
-                  <input type="text" name="juridico" value={formData.juridico || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Nombre" />
-                </div>
-                <div>
-                  <label className="block text-[12px] font-semibold text-ink-soft mb-1 uppercase tracking-wide">Abogado</label>
-                  <input type="text" name="abogado" value={formData.abogado || ''} onChange={handleInputChange} className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal bg-white" placeholder="Nombre" />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 text-[12.5px] text-ink-soft select-none">
-                <input type="checkbox" name="verificado" checked={formData.verificado ?? true} onChange={handleInputChange} className="w-4 h-4 accent-teal" />
-                Dato verificado por el equipo GIM (desmárcalo si aún falta confirmar la información)
-              </label>
-
-              <div className="mt-4 flex gap-3 justify-end">
-                <button type="button" onClick={closeModal} className="px-4 py-2 rounded-lg text-sm font-semibold text-ink-soft hover:bg-bg transition-colors">
-                  Cancelar
-                </button>
-                <button type="submit" className="px-6 py-2 rounded-lg text-sm font-semibold text-white bg-navy hover:bg-navy-deep transition-colors shadow-sm">
-                  Guardar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <EditorProyecto
+          proyecto={editingId ? proyectos.find(p => p.id === editingId) : null}
+          formData={formData}
+          onChange={handleInputChange}
+          onGuardar={handleSave}
+          onCerrar={cerrarEditor}
+          esNuevo={!editingId}
+          tiposProceso={TIPOS_PROCESO}
+          estadosProceso={ESTADOS_PROCESO}
+          fases={FASES_EMBUDO}
+          guardando={guardandoProyecto}
+        />
       )}
+
     </div>
   )
 }
