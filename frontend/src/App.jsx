@@ -45,7 +45,18 @@ const FASES_EMBUDO = [
   { key: 'fase2', label: 'Fase 2 · Estudios', color: '#37568f' },
   { key: 'fase3', label: 'Fase 3 · Adjudicación', color: '#1f3a6b' },
   { key: 'ejecucion', label: 'Ejecución', color: '#0A1730' },
+  { key: 'liquidacion', label: 'Liquidación', color: '#B08D3F' },
 ]
+
+// Cada etapa mide el avance con su propia unidad. Sin esto, un proyecto en obra
+// mostraba el porcentaje de sus documentos precontractuales como si fuera avance
+// de ejecución.
+const UNIDAD_AVANCE = {
+  planeacion:     'estructuración',
+  precontractual: 'estructuración',
+  contractual:    'ejecución de obra',
+  poscontractual: 'liquidación',
+}
 
 function Dashboard() {
   const { user, signOut } = useAuth()
@@ -132,10 +143,10 @@ function Dashboard() {
   // Solo proyectos que YA registran avance: listar ocho proyectos en 0 % no
   // dice nada y hacía que la tarjeta pareciera rota en la vista territorial.
   const ranking = [...vistaProyectos]
-    .filter(p => (p.avance || 0) > 0)
-    .sort((a, b) => (b.avance || 0) - (a.avance || 0))
+    .filter(p => (p.avanceVigente ?? p.avance ?? 0) > 0)
+    .sort((a, b) => (b.avanceVigente ?? b.avance ?? 0) - (a.avanceVigente ?? a.avance ?? 0))
     .slice(0, 8);
-  const conAvanceTotal = vistaProyectos.filter(p => (p.avance || 0) > 0).length;
+  const conAvanceTotal = vistaProyectos.filter(p => (p.avanceVigente ?? p.avance ?? 0) > 0).length;
 
   // Abre el proyecto en la tabla de abajo y lo trae a la vista.
   const irAlProyecto = (id) => {
@@ -603,13 +614,13 @@ function Dashboard() {
         {/* Ranking */}
         <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm flex flex-col mb-6">
           <div className="flex items-baseline justify-between mb-1 gap-2">
-            <h3 className="font-serif text-[16px] font-semibold text-navy-deep m-0">Mayor avance documental</h3>
+            <h3 className="font-serif text-[16px] font-semibold text-navy-deep m-0">Mayor avance de su etapa</h3>
             <span className="text-[11.5px] text-ink-faint font-mono">
               {conAvanceTotal > 8 ? `8 de ${conAvanceTotal} con avance` : `${conAvanceTotal} con avance`}
             </span>
           </div>
           <p className="text-[12px] text-ink-soft mb-4">
-            Porcentaje de documentos del proceso ya aprobados. Haz clic en un proyecto para abrir su detalle.
+            Avance de la etapa en la que está cada proyecto: estructuración, ejecución de obra o liquidación. Haz clic para abrir su detalle.
           </p>
           <div className="flex flex-col gap-1">
             {ranking.map((p, i) => (
@@ -630,14 +641,14 @@ function Dashboard() {
                   <span className="flex items-center gap-1.5 mt-1">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: colorEstado(p.statusActual) }}></span>
                     <span className="text-[10.5px] text-ink-soft truncate">
-                      {p.statusActual || 'Sin estado'}{p.tecnico ? ` · ${p.tecnico}` : ''}
+                      {UNIDAD_AVANCE[p.etapaActual] || 'estructuración'}{p.tecnico ? ` · ${p.tecnico}` : ''}
                     </span>
                   </span>
                 </span>
-                <span className="font-serif text-[18px] font-semibold text-navy-deep tabular-nums">{p.avance || 0}%</span>
+                <span className="font-serif text-[18px] font-semibold text-navy-deep tabular-nums">{p.avanceVigente ?? p.avance ?? 0}%</span>
                 <span></span>
                 <span className="col-span-2 h-1.5 bg-bg rounded overflow-hidden">
-                  <span className="block h-full rounded" style={{ width: `${p.avance || 0}%`, background: colorEstado(p.statusActual) }}></span>
+                  <span className="block h-full rounded" style={{ width: `${p.avanceVigente ?? p.avance ?? 0}%`, background: colorEstado(p.statusActual) }}></span>
                 </span>
               </button>
             ))}

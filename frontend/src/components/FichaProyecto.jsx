@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 import DocumentosPanel from './DocumentosPanel'
 import { listAvancePorEtapa, ETAPAS } from '../lib/actividadesApi'
 
+// Cada etapa se mide con su propia unidad.
+const UNIDAD = {
+  planeacion: 'estructuración', precontractual: 'estructuración',
+  contractual: 'ejecución', poscontractual: 'liquidación',
+}
+
 // Ficha de CONSULTA. No pide ni edita datos del proceso: muestra el estado con
 // tarjetas y gráficos. Todo lo modificable vive en el editor, que se abre aparte.
 
@@ -59,15 +65,40 @@ export default function FichaProyecto({ proyecto, textoPlazo, formatFecha, color
                  detalle={proyecto.tecnico ? `Técnico: ${proyecto.tecnico}` : 'Sin técnico asignado'} />
         <Tarjeta titulo="Valor" valor={formatMoney(proyecto.valorContrato)} color="#B08D3F"
                  detalle={proyecto.cdp ? `CDP ${proyecto.cdp}` : 'Sin CDP registrado'} />
-        <Tarjeta titulo="Avance documental" valor={`${proyecto.avance || 0}%`} color="#1A7A6E" />
+        <Tarjeta
+          titulo={`Avance · ${UNIDAD[proyecto.etapaActual] || 'estructuración'}`}
+          valor={`${proyecto.avanceVigente ?? proyecto.avance ?? 0}%`}
+          color="#1A7A6E"
+          detalle={proyecto.etapaActual === 'contractual'
+            ? (proyecto.ultimoCorte
+                ? `Corte ${formatFecha(proyecto.ultimoCorte)}`
+                : 'Sin reportes de obra')
+            : (proyecto.origenEstructuracion === 'actividades' ? 'Según actividades' : 'Dato del informe')} />
         <Tarjeta titulo="Plazo" valor={proyecto.semaforo === 'sin_termino' ? 'Sin término' : textoPlazo(proyecto)}
                  color={colorPlazo}
                  detalle={proyecto.fechaLimite ? `Vence ${formatFecha(proyecto.fechaLimite)}` : null} />
       </div>
 
-      {/* Avance por etapa */}
+      {/* Los tres avances, cada uno en su unidad */}
       <div className="px-2 mb-4">
         <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-2.5">Avance por etapa</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
+          {[
+            { t: 'Estructuración', v: proyecto.avanceEstructuracion, d: 'Actividades de planeación y precontractual', c: '#37568f' },
+            { t: 'Ejecución de obra', v: proyecto.avanceEjecucion, d: proyecto.ultimoCorte ? `Último corte ${formatFecha(proyecto.ultimoCorte)}` : 'Sin reportes semanales', c: '#2a78d6' },
+            { t: 'Liquidación', v: proyecto.avanceLiquidacion, d: 'Actividades poscontractuales', c: '#B08D3F' },
+          ].map(x => (
+            <div key={x.t} className={`border rounded-lg p-3 ${UNIDAD[proyecto.etapaActual] && x.t.toLowerCase().startsWith(UNIDAD[proyecto.etapaActual].slice(0,6)) ? 'border-navy bg-navy/5' : 'border-border bg-white'}`}>
+              <p className="font-mono text-[9px] tracking-widest uppercase text-ink-faint font-semibold m-0">{x.t}</p>
+              <p className="font-serif text-[19px] font-semibold text-navy-deep m-0 mt-0.5 leading-none">{x.v ?? 0}%</p>
+              <span className="block h-1 bg-bg rounded overflow-hidden mt-1.5">
+                <span className="block h-full rounded" style={{ width: `${x.v ?? 0}%`, background: x.c }}></span>
+              </span>
+              <p className="text-[10px] text-ink-faint m-0 mt-1.5 leading-snug">{x.d}</p>
+            </div>
+          ))}
+        </div>
+        <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-2.5">Actividades cumplidas</h4>
         {avance === null ? (
           <p className="text-[12px] text-ink-faint">Calculando…</p>
         ) : (

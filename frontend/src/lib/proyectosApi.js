@@ -67,6 +67,16 @@ const CALCULADOS = {
   fechaLimite: 'fecha_limite',
   diasHabilesRestantes: 'dias_habiles_restantes',
   semaforo: 'semaforo',
+  // Avance separado por etapa (ver v_avance_proyecto en la base)
+  etapaActual: 'etapa_actual',
+  avanceEstructuracion: 'avance_estructuracion',
+  origenEstructuracion: 'origen_estructuracion',
+  avanceEjecucion: 'avance_ejecucion',
+  avanceFinanciero: 'avance_financiero',
+  ultimoCorte: 'ultimo_corte',
+  diasSinReportar: 'dias_sin_reportar',
+  avanceLiquidacion: 'avance_liquidacion',
+  avanceVigente: 'avance_vigente',
 }
 
 // Columnas de fecha: '' no es una fecha válida en Postgres, se manda como null.

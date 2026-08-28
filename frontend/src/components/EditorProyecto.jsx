@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import ActividadesPanel from './ActividadesPanel'
 import HistorialPanel from './HistorialPanel'
+import AvanceSemanalPanel from './AvanceSemanalPanel'
 import { listSedes, vincularProyectoASede, desvincularProyectoDeSede } from '../lib/sedesApi'
 
 // Panel de EDICIÓN. Independiente de la ficha de consulta: aquí se puede
@@ -11,6 +12,7 @@ const PESTANAS = [
   { key: 'datos',       label: 'Datos del proceso' },
   { key: 'equipo',      label: 'Equipo' },
   { key: 'actividades', label: 'Actividades' },
+  { key: 'ejecucion',   label: 'Avance de obra' },
   { key: 'contractual', label: 'Contractual' },
   { key: 'ubicacion',   label: 'Ubicación' },
   { key: 'historial',   label: 'Historial' },
@@ -65,7 +67,9 @@ export default function EditorProyecto({
 
   // En un proyecto nuevo aún no hay id, así que actividades/ubicación/historial
   // no tienen sobre qué operar hasta después de guardar.
-  const pestanasVisibles = esNuevo ? PESTANAS.filter(p => p.key === 'datos' || p.key === 'equipo') : PESTANAS
+  const pestanasVisibles = esNuevo
+    ? PESTANAS.filter(p => p.key === 'datos' || p.key === 'equipo' || p.key === 'contractual')
+    : PESTANAS
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-ink/50 backdrop-blur-sm overflow-y-auto">
@@ -186,6 +190,10 @@ export default function EditorProyecto({
               </>
             )}
 
+            {pestana === 'ejecucion' && !esNuevo && (
+              <AvanceSemanalPanel proyectoId={proyecto.id} />
+            )}
+
             {pestana === 'contractual' && (
               <div className="grid grid-cols-2 gap-4">
                 <Campo label="Entró a la fase el"><input type="date" name="faseDesde" value={formData.faseDesde || ''} onChange={onChange} className={inputCls} /></Campo>
@@ -193,7 +201,7 @@ export default function EditorProyecto({
                 <Campo label="Fecha de inicio"><input type="date" name="fechaInicio" value={formData.fechaInicio || ''} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Fecha de terminación"><input type="date" name="fechaFin" value={formData.fechaFin || ''} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Fecha acta final"><input type="date" name="fechaActaFinal" value={formData.fechaActaFinal || ''} onChange={onChange} className={inputCls} /></Campo>
-                <Campo label="Avance contractual (%)"><input type="number" min="0" max="100" name="avanceContractual" value={formData.avanceContractual ?? 0} onChange={onChange} className={inputCls} /></Campo>
+                <Campo label="Avance contractual (%)" ayuda="Valor histórico. El avance real se registra en «Avance de obra»"><input type="number" min="0" max="100" name="avanceContractual" value={formData.avanceContractual ?? 0} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Avance poscontractual (%)"><input type="number" min="0" max="100" name="avancePoscontractual" value={formData.avancePoscontractual ?? 0} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Pagado"><input type="number" name="pagado" value={formData.pagado ?? ''} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Actas de pago"><input type="number" name="actasPago" value={formData.actasPago ?? ''} onChange={onChange} className={inputCls} /></Campo>
