@@ -6,6 +6,7 @@ import UpdatePassword from './components/UpdatePassword'
 import Logo from './components/Logo'
 import DocumentosPanel from './components/DocumentosPanel'
 import HistorialPanel from './components/HistorialPanel'
+import MapaSedes from './components/MapaSedes'
 import { listProyectos, createProyecto, updateProyecto, listTerminos, guardarTermino } from './lib/proyectosApi'
 
 // --- Vocabularios canónicos ---------------------------------------------
@@ -352,6 +353,12 @@ function Dashboard() {
               >
                 Territoriales
               </button>
+              <button
+                className={`px-4 py-2 rounded-lg font-semibold text-[13.5px] transition-colors ${tab === 'mapa' ? 'bg-gold text-navy-deep shadow' : 'text-white/70 hover:text-white hover:bg-white/5'}`}
+                onClick={() => setTab('mapa')}
+              >
+                Mapa
+              </button>
             </div>
             <div className="text-right leading-tight border-l border-white/10 pl-4">
               <div className="text-[12px] font-semibold text-white">{user?.email}</div>
@@ -370,6 +377,22 @@ function Dashboard() {
             Error cargando proyectos: {error}
           </div>
         )}
+
+        {tab === 'mapa' ? (
+          <>
+            <div className="mb-6">
+              <h2 className="font-serif text-[28px] font-semibold mb-1 tracking-tight text-navy-deep">
+                Ubicación de sedes <span className="text-gold">—</span> ESAP
+              </h2>
+              <p className="text-ink-soft text-sm max-w-2xl">
+                Sede central, direcciones territoriales y CETAP, con los proyectos de infraestructura
+                que se adelantan en cada una.
+              </p>
+            </div>
+            <MapaSedes />
+          </>
+        ) : (
+        <>
 
         {/* Comparativo Sede Central vs Territorial — vista general, no depende de la pestaña activa */}
         <div className="bg-card border border-border rounded-[10px] p-5 shadow-sm mb-6">
@@ -741,6 +764,8 @@ function Dashboard() {
             </table>
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Configuración de términos por fase */}
