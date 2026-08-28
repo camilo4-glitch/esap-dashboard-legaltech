@@ -7,6 +7,7 @@ import Logo from './components/Logo'
 import FichaProyecto from './components/FichaProyecto'
 import EditorProyecto from './components/EditorProyecto'
 import MapaSedes from './components/MapaSedes'
+import VistaEjecutiva from './components/VistaEjecutiva'
 import { listProyectos, createProyecto, updateProyecto, listTerminos, guardarTermino } from './lib/proyectosApi'
 
 // --- Vocabularios canónicos ---------------------------------------------
@@ -100,6 +101,29 @@ function Dashboard() {
   const [formData, setFormData] = useState({});
   const [expandedRow, setExpandedRow] = useState(null);
   const [guardandoProyecto, setGuardandoProyecto] = useState(false);
+
+  // Modo presentación: oculta controles de edición y avisos internos, agranda
+  // la tipografía y pasa a pantalla completa. Para proyectar ante terceros.
+  const [presentacion, setPresentacion] = useState(false);
+
+  const alternarPresentacion = () => {
+    const entrando = !presentacion;
+    setPresentacion(entrando);
+    setExpandedRow(null);
+    try {
+      if (entrando && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else if (!entrando && document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch { /* la pantalla completa es opcional */ }
+  };
+
+  useEffect(() => {
+    const alTeclear = (e) => { if (e.key === 'Escape' && presentacion) setPresentacion(false); };
+    window.addEventListener('keydown', alTeclear);
+    return () => window.removeEventListener('keydown', alTeclear);
+  }, [presentacion]);
 
   const fetchProyectos = () => {
     setLoading(true);
@@ -344,7 +368,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen pb-16 relative bg-bg text-ink font-sans">
+    <div className={`min-h-screen pb-16 relative bg-bg text-ink font-sans ${presentacion ? "modo-presentacion" : ""}`}>
       {/* Franja superior de acento */}
       <div className="h-[3px] bg-gradient-to-r from-navy-deep via-gold to-navy-deep" />
 
@@ -373,8 +397,21 @@ function Dashboard() {
               >
                 Mapa
               </button>
+              <button
+                className={`px-4 py-2 rounded-lg font-semibold text-[13.5px] transition-colors ${tab === 'ejecutiva' ? 'bg-gold text-navy-deep shadow' : 'text-white/70 hover:text-white hover:bg-white/5'}`}
+                onClick={() => setTab('ejecutiva')}
+              >
+                Ejecutiva
+              </button>
             </div>
-            <div className="text-right leading-tight border-l border-white/10 pl-4">
+            <button
+              onClick={alternarPresentacion}
+              title={presentacion ? 'Salir (Esc)' : 'Modo presentación'}
+              className="px-3 py-2 rounded-lg text-[12.5px] font-semibold border border-white/20 bg-white/5 text-white/80 hover:bg-gold hover:text-navy-deep hover:border-gold transition-colors cursor-pointer"
+            >
+              {presentacion ? 'Salir' : 'Presentar'}
+            </button>
+            <div className="text-right leading-tight border-l border-white/10 pl-4 no-presentar">
               <div className="text-[12px] font-semibold text-white">{user?.email}</div>
               <button onClick={signOut} className="text-[11px] text-white/50 hover:text-gold underline">
                 Cerrar sesión
@@ -392,7 +429,15 @@ function Dashboard() {
           </div>
         )}
 
-        {tab === 'mapa' ? (
+        {tab === 'ejecutiva' ? (
+          <VistaEjecutiva
+            proyectos={proyectos}
+            fases={FASES_EMBUDO}
+            unidadAvance={UNIDAD_AVANCE}
+            colorEstado={colorEstado}
+            formatFecha={formatFecha}
+          />
+        ) : tab === 'mapa' ? (
           <>
             <div className="mb-6">
               <h2 className="font-serif text-[28px] font-semibold mb-1 tracking-tight text-navy-deep">
@@ -403,7 +448,7 @@ function Dashboard() {
                 que se adelantan en cada una.
               </p>
             </div>
-            <MapaSedes />
+            <MapaSedes proyectos={proyectos} presentacion={presentacion} />
           </>
         ) : (
         <>
@@ -447,7 +492,7 @@ function Dashboard() {
             <h2 className="font-serif text-[28px] font-semibold mb-1 tracking-tight text-navy-deep">{tab === 'sede' ? 'Sede Central CAN' : 'Direcciones Territoriales'} <span className="text-gold">—</span> Proyectos</h2>
             <p className="text-ink-soft text-sm max-w-2xl">Ruta de estructuración de los proyectos desde la fase inicial hasta el acta de inicio.</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 no-presentar">
             <button
               onClick={exportarCSV}
               className="bg-white border border-navy text-navy hover:bg-navy hover:text-white font-semibold py-2.5 px-5 rounded-lg shadow-sm transition-colors text-sm tracking-wide"
@@ -464,7 +509,7 @@ function Dashboard() {
         </div>
 
         {/* Filtros */}
-        <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="no-presentar flex flex-wrap items-center gap-3 mb-6">
           <select value={filtroTecnico} onChange={(e) => setFiltroTecnico(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-teal">
             <option value="">Técnico: todos</option>
             {opcionesTecnico.map(t => <option key={t} value={t}>{t}</option>)}
@@ -516,7 +561,7 @@ function Dashboard() {
                 <span className="text-[11px] text-white/60 font-mono">
                   {enTermino} en término · {sinTermino} sin plazo
                 </span>
-                <button onClick={abrirTerminos} className="text-[11px] text-gold hover:text-white underline bg-transparent border-0 cursor-pointer">
+                <button onClick={abrirTerminos} className="no-presentar text-[11px] text-gold hover:text-white underline bg-transparent border-0 cursor-pointer">
                   Configurar plazos
                 </button>
               </span>
@@ -717,7 +762,7 @@ function Dashboard() {
                         </span>
                       </td>
                       <td className="p-3 text-right">
-                        <button onClick={(e) => abrirEditor(p, e)} className="text-ink-soft hover:text-navy px-2 py-1 rounded border border-transparent hover:border-border bg-transparent hover:bg-white transition-all text-xs font-semibold">
+                        <button onClick={(e) => abrirEditor(p, e)} className="no-presentar text-ink-soft hover:text-navy px-2 py-1 rounded border border-transparent hover:border-border bg-transparent hover:bg-white transition-all text-xs font-semibold">
                           Editar
                         </button>
                       </td>

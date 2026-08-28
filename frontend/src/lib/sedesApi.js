@@ -2,6 +2,14 @@
 // con los proyectos que se intervienen en cada una.
 import { supabase } from './supabaseClient'
 
+// Solo los vínculos proyecto↔sede. Los datos del proyecto los aporta el
+// tablero, que ya los tiene con avance, etapa y semáforo calculados.
+export async function listVinculos() {
+  const { data, error } = await supabase.from('proyecto_sedes').select('proyecto_id, sede_id')
+  if (error) throw error
+  return data
+}
+
 export async function listSedes() {
   const { data: sedes, error } = await supabase
     .from('sedes')
@@ -55,4 +63,15 @@ export async function desvincularProyectoDeSede(proyectoId, sedeId) {
     .from('proyecto_sedes').delete()
     .eq('proyecto_id', proyectoId).eq('sede_id', sedeId)
   if (error) throw error
+}
+
+// Conteo de proyectos por departamento, para el mapa coroplético.
+// Una territorial cubre varios departamentos, así que el conteo sale de la
+// jurisdicción, no de la ciudad sede.
+export async function listProyectosPorDepartamento() {
+  const { data, error } = await supabase
+    .from('v_proyectos_por_departamento')
+    .select('*')
+  if (error) throw error
+  return data
 }

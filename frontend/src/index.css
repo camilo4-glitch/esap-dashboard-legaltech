@@ -34,3 +34,65 @@
       radial-gradient(900px 500px at 100% 0%, rgba(176,141,63,0.05), transparent 55%);
   }
 }
+
+/* ---------------------------------------------------------------
+   Modo presentación
+   Oculta los controles de edición y los avisos internos, y agranda
+   la tipografía para proyectar ante terceros. Se activa con el botón
+   "Presentar" de la barra superior; se sale con Esc.
+   --------------------------------------------------------------- */
+.modo-presentacion .no-presentar {
+  display: none !important;
+}
+
+/* Las etiquetas de "sin verificar" son señal interna de trabajo:
+   fuera de contexto restan credibilidad más de lo que aportan. */
+.modo-presentacion .bg-amber-100,
+.modo-presentacion .bg-amber-50 {
+  display: none !important;
+}
+
+.modo-presentacion {
+  font-size: 1.09rem;
+}
+
+.modo-presentacion table {
+  font-size: 14px;
+}
+
+.modo-presentacion h2 {
+  font-size: 34px;
+}
+
+.modo-presentacion h3 {
+  font-size: 19px;
+}
+
+/* Más aire entre bloques al proyectar */
+.modo-presentacion .max-w-\[1360px\] {
+  max-width: 1600px;
+}
+
+/* Impresión / exportar a PDF desde la vista ejecutiva.
+   No hace falta librería: el navegador ofrece "Guardar como PDF". */
+@media print {
+  .no-presentar,
+  .sticky,
+  nav {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  /* Que ninguna tarjeta se parta entre páginas */
+  .border {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  #vista-ejecutiva {
+    padding: 0;
+  }
+  @page {
+    margin: 14mm;
+  }
+}
