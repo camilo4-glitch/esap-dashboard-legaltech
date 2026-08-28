@@ -243,11 +243,16 @@ export default function MapaSedes({ proyectos = [], presentacion = false }) {
           </p>
         )}
 
-        {/* Selector de vista */}
-        <div className="flex items-center gap-2 mb-3">
-          <div className="inline-flex rounded-lg border border-border overflow-hidden">
+        {avisoGeo && (
+          <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">{avisoGeo}</p>
+        )}
+
+        {/* Una sola barra: vista + filtros. Antes eran dos filas separadas
+            y se leían como dos sistemas de filtrado distintos. */}
+        <div className="no-presentar flex flex-wrap items-center gap-2 mb-4">
+          <div className="inline-flex rounded-lg border border-border overflow-hidden mr-1">
             {[['puntos','Por sede'], ['departamentos','Por departamento']].map(([k, t]) => (
-              <button key={k} onClick={() => setVista(k)}
+              <button key={k} type="button" onClick={() => setVista(k)}
                 className={`px-3 py-1.5 text-[12px] font-semibold border-0 cursor-pointer transition-colors ${
                   vista === k ? 'bg-navy text-white' : 'bg-white text-ink-soft hover:text-navy'}`}>
                 {t}
@@ -257,14 +262,6 @@ export default function MapaSedes({ proyectos = [], presentacion = false }) {
           {vista === 'departamentos' && !geo && !avisoGeo && (
             <span className="text-[11.5px] text-ink-faint">Descargando cartografía…</span>
           )}
-        </div>
-
-        {avisoGeo && (
-          <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">{avisoGeo}</p>
-        )}
-
-        {/* Filtros */}
-        <div className="no-presentar flex flex-wrap items-center gap-2 mb-4">
           <select value={fTipo} onChange={e => setFTipo(e.target.value)} className={selectCls}>
             <option value="">Todas las sedes ({sedes.length})</option>
             <option value="central">Sede Central ({conteoTipo('central')})</option>

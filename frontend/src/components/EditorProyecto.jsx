@@ -32,7 +32,7 @@ const inputCls = 'w-full border border-border rounded-lg px-3 py-2 text-sm focus
 
 export default function EditorProyecto({
   proyecto, formData, onChange, onGuardar, onCerrar, esNuevo,
-  tiposProceso, estadosProceso, fases, guardando,
+  tiposProceso, estadosProceso, fases, guardando, onEliminar,
 }) {
   const [pestana, setPestana] = useState('datos')
   const [sedes, setSedes] = useState([])
@@ -140,9 +140,6 @@ export default function EditorProyecto({
                 <Campo label="CDP">
                   <input type="number" name="cdp" value={formData.cdp ?? ''} onChange={onChange} className={inputCls} />
                 </Campo>
-                <Campo label="Avance documental (%)">
-                  <input type="number" min="0" max="100" name="avance" value={formData.avance ?? 0} onChange={onChange} className={inputCls} />
-                </Campo>
                 <Campo label="Número SECOP">
                   <input name="numeroSecop" value={formData.numeroSecop || ''} onChange={onChange} className={inputCls} placeholder="ESAP-SAMC-012-2026" />
                 </Campo>
@@ -170,8 +167,9 @@ export default function EditorProyecto({
             {pestana === 'equipo' && (
               <div className="grid grid-cols-2 gap-4">
                 <Campo label="Técnico a cargo"><input name="tecnico" value={formData.tecnico || ''} onChange={onChange} className={inputCls} /></Campo>
-                <Campo label="Jurídico"><input name="juridico" value={formData.juridico || ''} onChange={onChange} className={inputCls} /></Campo>
-                <Campo label="Abogado"><input name="abogado" value={formData.abogado || ''} onChange={onChange} className={inputCls} /></Campo>
+                <Campo label="Abogado a cargo" ayuda="Antes existían «Jurídico» y «Abogado» por separado; se unificaron porque guardaban el mismo dato.">
+                  <input name="abogado" value={formData.abogado || ''} onChange={onChange} className={inputCls} placeholder="Nombre completo" />
+                </Campo>
                 <Campo label="Financiero"><input name="financiero" value={formData.financiero || ''} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Supervisor"><input name="supervisor" value={formData.supervisor || ''} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Apoyo a la supervisión"><input name="apoyoSupervision" value={formData.apoyoSupervision || ''} onChange={onChange} className={inputCls} /></Campo>
@@ -201,8 +199,11 @@ export default function EditorProyecto({
                 <Campo label="Fecha de inicio"><input type="date" name="fechaInicio" value={formData.fechaInicio || ''} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Fecha de terminación"><input type="date" name="fechaFin" value={formData.fechaFin || ''} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Fecha acta final"><input type="date" name="fechaActaFinal" value={formData.fechaActaFinal || ''} onChange={onChange} className={inputCls} /></Campo>
-                <Campo label="Avance contractual (%)" ayuda="Valor histórico. El avance real se registra en «Avance de obra»"><input type="number" min="0" max="100" name="avanceContractual" value={formData.avanceContractual ?? 0} onChange={onChange} className={inputCls} /></Campo>
-                <Campo label="Avance poscontractual (%)"><input type="number" min="0" max="100" name="avancePoscontractual" value={formData.avancePoscontractual ?? 0} onChange={onChange} className={inputCls} /></Campo>
+                <div className="col-span-2 rounded-md border border-border bg-bg px-3 py-2 text-[11.5px] text-ink-soft leading-snug">
+                  El avance ya no se digita a mano. Se calcula solo: actividades cumplidas
+                  en planeación y precontractual, reportes semanales de obra en contractual,
+                  y actividades de liquidación en poscontractual.
+                </div>
                 <Campo label="Pagado"><input type="number" name="pagado" value={formData.pagado ?? ''} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Actas de pago"><input type="number" name="actasPago" value={formData.actasPago ?? ''} onChange={onChange} className={inputCls} /></Campo>
                 <Campo label="Retención"><input type="number" name="retencion" value={formData.retencion ?? ''} onChange={onChange} className={inputCls} /></Campo>
@@ -252,7 +253,24 @@ export default function EditorProyecto({
             {pestana === 'historial' && !esNuevo && <HistorialPanel proyectoId={proyecto.id} />}
           </div>
 
-          <div className="px-6 py-4 border-t border-border flex gap-3 justify-end bg-bg/40">
+          <div className="px-6 py-4 border-t border-border flex gap-3 items-center bg-bg/40">
+            {!esNuevo && onEliminar && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(
+                    `¿Enviar «${proyecto.nombre}» a la papelera?\n\n` +
+                    'No se borra nada: el proyecto sale de los tableros pero conserva su ' +
+                    'historial, sus actividades y sus reportes de obra, y se puede restaurar ' +
+                    'desde el botón «Papelera».'
+                  )) onEliminar(proyecto.id)
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-red-700 border border-red-200 bg-white hover:bg-red-50 transition-colors cursor-pointer"
+              >
+                Enviar a papelera
+              </button>
+            )}
+            <span className="flex-1"></span>
             <button type="button" onClick={onCerrar} className="px-4 py-2 rounded-lg text-sm font-semibold text-ink-soft hover:bg-bg bg-transparent border-0 cursor-pointer">
               Cerrar
             </button>

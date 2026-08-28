@@ -8,7 +8,8 @@ import FichaProyecto from './components/FichaProyecto'
 import EditorProyecto from './components/EditorProyecto'
 import MapaSedes from './components/MapaSedes'
 import VistaEjecutiva from './components/VistaEjecutiva'
-import { listProyectos, createProyecto, updateProyecto, listTerminos, guardarTermino } from './lib/proyectosApi'
+import PapeleraPanel from './components/PapeleraPanel'
+import { listProyectos, createProyecto, updateProyecto, listTerminos, guardarTermino, enviarAPapelera } from './lib/proyectosApi'
 
 // --- Vocabularios canónicos ---------------------------------------------
 // Estas listas son la ÚNICA fuente de verdad para los desplegables del
@@ -101,6 +102,7 @@ function Dashboard() {
   const [formData, setFormData] = useState({});
   const [expandedRow, setExpandedRow] = useState(null);
   const [guardandoProyecto, setGuardandoProyecto] = useState(false);
+  const [papeleraAbierta, setPapeleraAbierta] = useState(false);
 
   // Modo presentación: oculta controles de edición y avisos internos, agranda
   // la tipografía y pasa a pantalla completa. Para proyectar ante terceros.
@@ -163,7 +165,7 @@ function Dashboard() {
   const enEjecucion = vistaProyectos.filter(p => (p.statusActual || '').toUpperCase().includes('EJECUCION') || (p.statusActual || '').toUpperCase().includes('EJECUCIÓN')).length;
   const enTramite = vistaProyectos.length - enEjecucion;
 
-  // Ranking Top 8 por avance documental.
+  // Ranking Top 8 por avance vigente (el de la etapa en que está cada proyecto).
   // Solo proyectos que YA registran avance: listar ocho proyectos en 0 % no
   // dice nada y hacía que la tarjeta pareciera rota en la vista territorial.
   const ranking = [...vistaProyectos]
@@ -247,8 +249,10 @@ function Dashboard() {
     const grupo = nombreSede === 'Sede Central'
       ? proyectos.filter(p => p.sede === 'Sede Central')
       : proyectos.filter(p => p.sede !== 'Sede Central');
-    const conAvance = grupo.filter(p => p.avance !== undefined && p.avance !== null);
-    const avancePromedio = conAvance.length ? conAvance.reduce((s, p) => s + (p.avance || 0), 0) / conAvance.length : 0;
+    const conAvance = grupo.filter(p => (p.avanceVigente ?? p.avance ?? 0) > 0);
+    const avancePromedio = conAvance.length
+      ? conAvance.reduce((s, p) => s + Number(p.avanceVigente ?? p.avance ?? 0), 0) / conAvance.length
+      : 0;
     const valor = grupo.reduce((s, p) => s + (p.valorContrato || 0), 0);
     const ejecucion = grupo.filter(p => (p.statusActual || '').toUpperCase().includes('EJECUCI')).length;
     return { total: grupo.length, avancePromedio, valor, ejecucion };
@@ -260,8 +264,8 @@ function Dashboard() {
   // aparte y es de solo lectura.
   const CAMPOS_EDITABLES = [
     'nombre','tipo','statusActual','fase','sede','objeto','observaciones','verificado',
-    'tecnico','juridico','abogado','financiero','apoyoSupervision','supervisor','contratista','equipoActual',
-    'cdp','valorContrato','avance','avanceContractual','avancePoscontractual',
+    'tecnico','abogado','financiero','apoyoSupervision','supervisor','contratista','equipoActual',
+    'cdp','valorContrato',
     'adjudicado','adicion','valorAdicion','pagado','actasPago','retencion',
     'numeroSecop','secop','rutaDocumentos',
     'faseDesde','fechaLimiteManual','fechaInicio','fechaFin','fechaActaFinal',
@@ -271,7 +275,7 @@ function Dashboard() {
     setEditingId(null);
     setFormData({
       nombre: '', tipo: '', statusActual: 'SIN INICIAR', fase: 'necesidad',
-      tecnico: '', valorContrato: '', avance: 0,
+      tecnico: '', valorContrato: '',
       sede: tab === 'sede' ? 'Sede Central' : 'Territorial',
       verificado: true,
     });
@@ -291,20 +295,31 @@ function Dashboard() {
     datos.adjudicado  = !!proyecto.adjudicado;
     datos.adicion     = !!proyecto.adicion;
     datos.fase        = proyecto.fase || 'necesidad';
-    datos.avance      = proyecto.avance ?? 0;
     setFormData(datos);
     setIsModalOpen(true);
   };
 
   const cerrarEditor = () => setIsModalOpen(false);
 
+  // Papelera: no borra la fila, solo la marca. Las vistas la dejan de mostrar,
+  // pero historial, actividades y reportes de obra siguen ahí y se restauran
+  // completos desde el botón «Papelera».
+  const mandarAPapelera = async (id) => {
+    try {
+      await enviarAPapelera(id);
+      setIsModalOpen(false);
+      setExpandedRow(null);
+      fetchProyectos();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     let val;
     if (type === 'checkbox') {
       val = checked;
-    } else if (['avance','avanceContractual','avancePoscontractual'].includes(name)) {
-      val = Math.max(0, Math.min(100, parseFloat(value) || 0));
     } else if (['valorContrato','cdp','valorAdicion','pagado','actasPago','retencion'].includes(name)) {
       // Vacío se conserva vacío (se guardará como NULL), no como 0.
       val = value === '' ? '' : (parseFloat(value) || 0);
@@ -347,8 +362,8 @@ function Dashboard() {
   const proyectoExpandido = proyectos.find(p => p.id === expandedRow);
 
   const exportarCSV = () => {
-    const cols = ['id', 'nombre', 'sede', 'tipo', 'fase', 'statusActual', 'tecnico', 'valorContrato', 'avance', 'objeto', 'observaciones', 'juridico', 'abogado'];
-    const encabezados = ['ID', 'Nombre', 'Sede', 'Tipo de proceso', 'Fase', 'Estado', 'Técnico', 'Valor estimado', 'Avance %', 'Objeto', 'Observaciones', 'Jurídico', 'Abogado'];
+    const cols = ['id', 'nombre', 'sede', 'tipo', 'fase', 'statusActual', 'tecnico', 'valorContrato', 'avance', 'objeto', 'observaciones', 'abogado'];
+    const encabezados = ['ID', 'Nombre', 'Sede', 'Tipo de proceso', 'Fase', 'Estado', 'Técnico', 'Valor estimado', 'Avance %', 'Objeto', 'Observaciones', 'Abogado a cargo'];
     const escapar = (v) => {
       const s = v === null || v === undefined ? '' : String(v);
       return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -430,13 +445,7 @@ function Dashboard() {
         )}
 
         {tab === 'ejecutiva' ? (
-          <VistaEjecutiva
-            proyectos={proyectos}
-            fases={FASES_EMBUDO}
-            unidadAvance={UNIDAD_AVANCE}
-            colorEstado={colorEstado}
-            formatFecha={formatFecha}
-          />
+          <VistaEjecutiva proyectos={proyectos} fases={FASES_EMBUDO} colorEstado={colorEstado} />
         ) : tab === 'mapa' ? (
           <>
             <div className="mb-6">
@@ -493,6 +502,13 @@ function Dashboard() {
             <p className="text-ink-soft text-sm max-w-2xl">Ruta de estructuración de los proyectos desde la fase inicial hasta el acta de inicio.</p>
           </div>
           <div className="flex gap-3 no-presentar">
+            <button
+              onClick={() => setPapeleraAbierta(true)}
+              title="Proyectos retirados de los tableros"
+              className="bg-white border border-border text-ink-soft hover:border-navy hover:text-navy font-semibold py-2.5 px-4 rounded-lg shadow-sm transition-colors text-sm tracking-wide"
+            >
+              Papelera
+            </button>
             <button
               onClick={exportarCSV}
               className="bg-white border border-navy text-navy hover:bg-navy hover:text-white font-semibold py-2.5 px-5 rounded-lg shadow-sm transition-colors text-sm tracking-wide"
@@ -699,8 +715,8 @@ function Dashboard() {
             ))}
             {!loading && ranking.length === 0 && (
               <div className="text-ink-soft text-[13px] text-center py-5 leading-relaxed">
-                Ningún proyecto de esta vista registra avance documental todavía.<br />
-                <span className="text-ink-faint text-[12px]">Los avances se cargan editando cada proyecto.</span>
+                Ningún proyecto de esta vista registra avance todavía.<br />
+                <span className="text-ink-faint text-[12px]">El avance se calcula solo: marca actividades cumplidas o carga un reporte semanal de obra.</span>
               </div>
             )}
           </div>
@@ -859,6 +875,14 @@ function Dashboard() {
           estadosProceso={ESTADOS_PROCESO}
           fases={FASES_EMBUDO}
           guardando={guardandoProyecto}
+          onEliminar={mandarAPapelera}
+        />
+      )}
+
+      {papeleraAbierta && (
+        <PapeleraPanel
+          onCerrar={() => setPapeleraAbierta(false)}
+          onRestaurado={fetchProyectos}
         />
       )}
 

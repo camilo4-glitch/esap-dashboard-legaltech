@@ -1,5 +1,4 @@
 import { useMemo } from 'react'
-import Logo from './Logo'
 
 // Vista EJECUTIVA: una sola pantalla, sin tablas, pensada para proyectar y para
 // imprimir en PDF (botón "Exportar PDF" → diálogo de impresión → Guardar como PDF,
@@ -44,7 +43,7 @@ function Barras({ titulo, datos, nota }) {
   )
 }
 
-export default function VistaEjecutiva({ proyectos, fases, unidadAvance, colorEstado, formatFecha }) {
+export default function VistaEjecutiva({ proyectos, fases, colorEstado }) {
   const r = useMemo(() => {
     const central = proyectos.filter(p => p.sede === 'Sede Central')
     const terr    = proyectos.filter(p => p.sede !== 'Sede Central')

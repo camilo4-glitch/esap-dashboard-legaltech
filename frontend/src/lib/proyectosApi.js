@@ -215,7 +215,45 @@ export async function updateProyecto(id, cambios) {
   return fromRow(data)
 }
 
-export async function deleteProyecto(id) {
-  const { error } = await supabase.from('proyectos').delete().eq('id', id)
+// ---- Papelera (borrado suave) ----
+// Nada se borra de verdad. `eliminado = true` saca el proyecto de las vistas
+// (v_proyectos_seguimiento y v_proyectos_por_departamento ya filtran por él),
+// pero la fila, su historial, sus actividades y sus reportes de obra siguen
+// intactos y se pueden restaurar. El disparador de auditoría anota quién y
+// cuándo, con acción `a_papelera` o `restaurar`.
+
+async function correoActual() {
+  const { data } = await supabase.auth.getUser()
+  return data?.user?.email || null
+}
+
+export async function enviarAPapelera(id) {
+  const { error } = await supabase
+    .from('proyectos')
+    .update({ eliminado: true, eliminado_en: new Date().toISOString(), eliminado_por: await correoActual() })
+    .eq('id', id)
   if (error) throw error
+}
+
+export async function restaurarProyecto(id) {
+  const { error } = await supabase
+    .from('proyectos')
+    .update({ eliminado: false, eliminado_en: null, eliminado_por: null })
+    .eq('id', id)
+  if (error) throw error
+}
+
+// La papelera se lee de la tabla, no de la vista: la vista los oculta a propósito.
+export async function listPapelera() {
+  const { data, error } = await supabase
+    .from('proyectos')
+    .select('id, nombre, sede, tipo, status_actual, tecnico, eliminado_en, eliminado_por')
+    .eq('eliminado', true)
+    .order('eliminado_en', { ascending: false })
+  if (error) throw error
+  return (data || []).map(r => ({
+    id: r.id, nombre: r.nombre, sede: r.sede, tipo: r.tipo,
+    statusActual: r.status_actual, tecnico: r.tecnico,
+    eliminadoEn: r.eliminado_en, eliminadoPor: r.eliminado_por,
+  }))
 }

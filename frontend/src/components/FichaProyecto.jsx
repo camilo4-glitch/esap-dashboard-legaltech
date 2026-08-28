@@ -82,6 +82,9 @@ export default function FichaProyecto({ proyecto, textoPlazo, formatFecha, color
       {/* Los tres avances, cada uno en su unidad */}
       <div className="px-2 mb-4">
         <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-2.5">Avance por etapa</h4>
+        <p className="text-[10.5px] text-ink-faint mb-2.5 mt-[-6px] leading-snug">
+          Cada etapa se mide con su propia unidad; la de tu etapa actual va resaltada.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
           {[
             { t: 'Estructuración', v: proyecto.avanceEstructuracion, d: 'Actividades de planeación y precontractual', c: '#37568f' },
@@ -98,7 +101,7 @@ export default function FichaProyecto({ proyecto, textoPlazo, formatFecha, color
             </div>
           ))}
         </div>
-        <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-2.5">Actividades cumplidas</h4>
+        <h4 className="font-bold text-[10.5px] uppercase tracking-widest text-ink-faint mb-2.5">Actividades cumplidas por etapa</h4>
         {avance === null ? (
           <p className="text-[12px] text-ink-faint">Calculando…</p>
         ) : (

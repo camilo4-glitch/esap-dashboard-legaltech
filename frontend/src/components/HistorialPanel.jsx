@@ -5,7 +5,7 @@ import { listHistorial } from '../lib/proyectosApi'
 const ETIQUETAS = {
   nombre: 'Nombre', sede: 'Sede', tipo: 'Tipo de proceso', objeto: 'Objeto',
   abogado: 'Abogado', cdp: 'CDP', valor_contrato: 'Valor', tecnico: 'Técnico',
-  juridico: 'Jurídico', financiero: 'Financiero', supervisor: 'Supervisor',
+  juridico: 'Jurídico (campo unificado con Abogado)', financiero: 'Financiero', supervisor: 'Supervisor',
   contratista: 'Contratista', fase: 'Fase', avance: 'Avance documental',
   avance_contractual: 'Avance contractual', adjudicado: 'Adjudicado',
   status_actual: 'Estado', observaciones: 'Observaciones', verificado: 'Verificado',
@@ -13,11 +13,14 @@ const ETIQUETAS = {
   numero_secop: 'Número SECOP', secop: 'Enlace SECOP', ruta_documentos: 'Carpeta',
   pagado: 'Pagado', actas_pago: 'Actas de pago', retencion: 'Retención',
   fecha_inicio: 'Fecha de inicio', fecha_fin: 'Fecha de terminación',
+  avance_poscontractual: 'Avance poscontractual', estado: 'Estado de la actividad',
+  avance_fisico: 'Avance físico', avance_financiero: 'Avance financiero',
 }
 
 const FASES = {
   necesidad: 'Sin iniciar', estructuracion: 'Estructuración', fase1: 'Fase 1 · Anexos',
   fase2: 'Fase 2 · Estudios', fase3: 'Fase 3 · Adjudicación', ejecucion: 'Ejecución',
+  liquidacion: 'Liquidación',
 }
 
 function mostrar(campo, valor) {
@@ -36,6 +39,8 @@ const ACCIONES = {
   carga_masiva_inicial: { texto: 'Carga inicial automática', color: 'bg-ink-faint' },
   actualizar_proyecto: { texto: 'Modificó', color: 'bg-navy' },
   crear_proyecto: { texto: 'Creó el proyecto', color: 'bg-teal' },
+  actividad: { texto: 'Actividad', color: 'bg-navy' },
+  avance_semanal: { texto: 'Reporte de obra', color: 'bg-teal' },
 }
 
 export default function HistorialPanel({ proyectoId }) {
